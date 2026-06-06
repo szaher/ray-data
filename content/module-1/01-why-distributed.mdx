@@ -1,0 +1,79 @@
+---
+title: "Why Distributed Computing?"
+quiz:
+  - question: "What is the main reason we need distributed computing?"
+    options:
+      - "To make code look more complex"
+      - "Single machines can't handle the scale of modern data and compute needs"
+      - "It's always faster than single-machine processing"
+      - "Python requires it"
+    correctIndex: 1
+    explanation: "Distributed computing exists because modern datasets and compute workloads exceed what a single machine can handle in reasonable time."
+  - question: "Which of these is NOT a limitation of single-machine processing?"
+    options:
+      - "RAM capacity"
+      - "CPU core count"
+      - "Network bandwidth between cores"
+      - "Disk I/O throughput"
+    correctIndex: 2
+    explanation: "CPU cores on the same machine communicate via shared memory, not network. Network bandwidth is a concern in distributed systems, not single-machine processing."
+---
+
+## The Problem: Why One Machine Isn't Enough
+
+Imagine you have a dataset of 10 billion rows. At 100 bytes per row, that's **1 terabyte** of data. Your laptop has 16 GB of RAM. You can't even load the data, let alone process it.
+
+This is the fundamental problem distributed computing solves: **when your data or computation exceeds what a single machine can handle**.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Single Machine"
+        A[16 GB RAM] --> B[4 CPU Cores]
+        B --> C[1 TB Disk]
+    end
+    subgraph "The Problem"
+        D[10 Billion Rows\n1 TB Data]
+    end
+    D -->|"Won't fit in RAM"| A
+    style D fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style A fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style B fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style C fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+## The Solution: Use More Machines
+
+Instead of one machine with 16 GB, use **64 machines** with 16 GB each. Now you have 1 TB of combined RAM. Split the data across all machines, process in parallel, combine the results.
+
+<MermaidDiagram chart={`graph TD
+    D[1 TB Dataset] --> S[Split]
+    S --> M1[Machine 1\n16 GB slice]
+    S --> M2[Machine 2\n16 GB slice]
+    S --> M3[Machine 3\n16 GB slice]
+    S --> M4[... Machine 64\n16 GB slice]
+    M1 --> C[Combine Results]
+    M2 --> C
+    M3 --> C
+    M4 --> C
+    C --> R[Final Result]
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style R fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Three Reasons You Need Distribution
+
+**1. Data doesn't fit in memory** — Your dataset is larger than any single machine's RAM. You need to spread it across many machines.
+
+**2. Computation takes too long** — Processing 1 TB on 4 cores might take 10 hours. On 256 cores across 64 machines, it takes ~10 minutes.
+
+**3. Fault tolerance** — If one machine dies, you don't lose everything. The work can be redistributed.
+
+## The Challenge
+
+Distributed computing sounds simple — just split the work! But it introduces hard problems:
+
+- **How do you split the data?** Not all splits are equal.
+- **How do machines communicate?** Network is 1000x slower than memory.
+- **What happens when a machine fails?** Mid-computation.
+- **How do you collect results?** Some operations (like sorting) need coordination.
+
+This is what frameworks like **Ray** solve for you. Instead of managing machines, networks, and failures yourself, you write Python code and Ray handles the distribution.

@@ -1,0 +1,77 @@
+---
+title: "Map-Reduce & Data Parallelism"
+quiz:
+  - question: "In the Map-Reduce pattern, what does the 'Map' step do?"
+    options:
+      - "Combines all results into one"
+      - "Applies a function to each piece of data independently"
+      - "Sorts the data"
+      - "Sends data to a database"
+    correctIndex: 1
+    explanation: "The Map step applies a transformation function to each data element independently — this is what makes it parallelizable."
+  - question: "Why is Map-Reduce important for distributed computing?"
+    options:
+      - "It was invented by Google"
+      - "The Map step is embarrassingly parallel — each piece can be processed independently"
+      - "It only works with key-value pairs"
+      - "It requires exactly two machines"
+    correctIndex: 1
+    explanation: "Map-Reduce's power comes from the Map step being embarrassingly parallel — no data element depends on another during mapping, so you can split across any number of workers."
+---
+
+## The Pattern Behind Everything
+
+Almost every data processing operation follows a three-step pattern:
+
+1. **Split** — Divide data into chunks
+2. **Process** — Apply a function to each chunk (independently)
+3. **Combine** — Merge the results
+
+This is **Map-Reduce**, and it's the foundation of distributed data processing.
+
+<MermaidDiagram chart={`graph TD
+    D[Dataset\n1000 rows] --> S[Split into chunks]
+    S --> C1[Chunk 1\n250 rows]
+    S --> C2[Chunk 2\n250 rows]
+    S --> C3[Chunk 3\n250 rows]
+    S --> C4[Chunk 4\n250 rows]
+    C1 -->|"Map: transform"| R1[Result 1]
+    C2 -->|"Map: transform"| R2[Result 2]
+    C3 -->|"Map: transform"| R3[Result 3]
+    C4 -->|"Map: transform"| R4[Result 4]
+    R1 --> RED[Reduce: combine]
+    R2 --> RED
+    R3 --> RED
+    R4 --> RED
+    RED --> F[Final Result]
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style F fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## A Concrete Example
+
+**Task:** Count the word frequency in 1 million documents.
+
+**Map step:** Each worker counts words in its chunk of documents. Worker 1 gets documents 1-250K, Worker 2 gets 250K-500K, etc.
+
+**Reduce step:** Merge all the word counts by summing them up.
+
+<CodeBlock language="python" code={`# Pseudocode — this is the pattern Ray Data uses internally
+# Split
+chunks = split_documents(all_documents, num_workers=4)
+
+# Map (runs in parallel across workers)
+partial_counts = [count_words(chunk) for chunk in chunks]
+
+# Reduce (combine results)
+total_counts = merge_counts(partial_counts)`} />
+
+## Why This Matters for Ray Data
+
+When you write `ds.map_batches(transform)` in Ray Data, you're doing exactly this:
+
+- Ray **splits** your dataset into blocks
+- Each block is **mapped** through your transform function on a separate worker
+- Results are **combined** back into a new dataset
+
+You don't write the split/combine logic — Ray Data handles it. You just write the transform function.

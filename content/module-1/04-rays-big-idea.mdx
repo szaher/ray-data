@@ -1,0 +1,94 @@
+---
+title: "Ray's Big Idea"
+quiz:
+  - question: "What is the role of the Ray Driver?"
+    options:
+      - "It stores all the data"
+      - "It's the main program that submits tasks and collects results"
+      - "It runs on every worker node"
+      - "It manages the network switches"
+    correctIndex: 1
+    explanation: "The Driver is your main Python program — it calls ray.init(), submits tasks, creates actors, and collects results. It coordinates work but doesn't do the heavy processing itself."
+  - question: "What makes Ray's object store special?"
+    options:
+      - "It uses a SQL database"
+      - "It stores objects in shared memory using Apache Arrow, enabling zero-copy reads"
+      - "It compresses all data automatically"
+      - "It only works with small objects"
+    correctIndex: 1
+    explanation: "Ray's object store uses shared memory with Apache Arrow format. Workers on the same node can read objects without copying them — zero-copy access — which is dramatically faster than serialization."
+---
+
+## Ray: Distributed Python That Feels Like Python
+
+Ray's core insight is simple: **distributed computing shouldn't require you to think about distribution**. You write Python functions, and Ray runs them across a cluster.
+
+Here's regular Python vs Ray:
+
+<CodeBlock language="python" code={`# Regular Python
+def process(data):
+    return transform(data)
+
+results = [process(chunk) for chunk in chunks]  # Sequential, one core`} />
+
+<CodeBlock language="python" code={`# Ray
+import ray
+
+@ray.remote
+def process(data):
+    return transform(data)
+
+futures = [process.remote(chunk) for chunk in chunks]  # Parallel, many cores
+results = ray.get(futures)`} />
+
+The only differences: `@ray.remote` decorator, `.remote()` to call, `ray.get()` to collect. Everything else is Python.
+
+## The Architecture
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Your Machine (Driver)"
+        D[Driver Program\nray.init, submit tasks]
+    end
+    subgraph "Ray Cluster"
+        H[Head Node\nGCS + Scheduler]
+        subgraph "Worker Node 1"
+            W1[Worker Process]
+            O1[Object Store\nShared Memory]
+        end
+        subgraph "Worker Node 2"
+            W2[Worker Process]
+            O2[Object Store\nShared Memory]
+        end
+        subgraph "Worker Node N"
+            W3[Worker Process]
+            O3[Object Store\nShared Memory]
+        end
+    end
+    D -->|"Submit tasks"| H
+    H -->|"Schedule"| W1
+    H -->|"Schedule"| W2
+    H -->|"Schedule"| W3
+    W1 <-->|"Zero-copy read"| O1
+    W2 <-->|"Zero-copy read"| O2
+    W3 <-->|"Zero-copy read"| O3
+    O1 <-->|"Transfer large objects"| O2
+    O2 <-->|"Transfer large objects"| O3
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style H fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
+`} />
+
+## The Key Components
+
+**Driver** — Your Python program. It connects to the cluster, submits tasks, and collects results. Think of it as the conductor of an orchestra.
+
+**Head Node** — Runs the **Global Control Store (GCS)** and **scheduler**. The GCS tracks all objects, actors, and cluster state. The scheduler decides which worker runs which task.
+
+**Workers** — Python processes that execute your tasks. Each worker can use CPU and/or GPU. Workers run on any node in the cluster.
+
+**Object Store** — Distributed shared memory on each node. Uses Apache Arrow format for zero-copy access. When a worker on Node 1 needs data from Node 2, the object store handles the transfer automatically.
+
+## Why This Matters
+
+When we get to Ray Data, you'll see that datasets are stored in the object store as Arrow-formatted blocks. Transformations are tasks scheduled by the Ray scheduler. The streaming execution engine decides how many blocks to process at once based on available memory.
+
+All of this happens automatically. You just write `ds.map_batches(my_function)`.

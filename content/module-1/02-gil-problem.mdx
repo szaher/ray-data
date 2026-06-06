@@ -1,0 +1,69 @@
+---
+title: "The GIL Problem & Python's Limits"
+quiz:
+  - question: "What does the GIL prevent in Python?"
+    options:
+      - "Running Python on multiple machines"
+      - "True parallel execution of Python bytecode across threads"
+      - "Using more than 4 GB of RAM"
+      - "Installing third-party packages"
+    correctIndex: 1
+    explanation: "The GIL (Global Interpreter Lock) ensures only one thread executes Python bytecode at a time, preventing true CPU parallelism with threads."
+  - question: "Why is multiprocessing limited for data processing?"
+    options:
+      - "It can't use more than one CPU core"
+      - "Data must be serialized/copied between processes, which is slow for large datasets"
+      - "It only works on Linux"
+      - "It doesn't support Python 3"
+    correctIndex: 1
+    explanation: "Each Python process has its own memory space. Sharing data between processes requires serialization (pickling), which is slow and doubles memory usage for large datasets."
+---
+
+## Python's Dirty Secret: The GIL
+
+Python has a **Global Interpreter Lock (GIL)** — a mutex that allows only one thread to execute Python bytecode at any given time. Even on a machine with 16 cores, a multi-threaded Python program uses just one core for Python code.
+
+<MermaidDiagram chart={`graph TD
+    subgraph "What you expect"
+        T1A[Thread 1] --> C1A[Core 1]
+        T2A[Thread 2] --> C2A[Core 2]
+        T3A[Thread 3] --> C3A[Core 3]
+        T4A[Thread 4] --> C4A[Core 4]
+    end
+    subgraph "What actually happens with GIL"
+        T1B[Thread 1] --> GIL[GIL Lock]
+        T2B[Thread 2] --> GIL
+        T3B[Thread 3] --> GIL
+        T4B[Thread 4] --> GIL
+        GIL --> C1B[Core 1 only]
+    end
+    style GIL fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style C1B fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
+`} />
+
+## The Multiprocessing Workaround
+
+Python's `multiprocessing` module bypasses the GIL by creating separate processes, each with its own Python interpreter and memory space. But this has costs:
+
+**The serialization problem:** To send data between processes, Python must *serialize* (pickle) it — convert it to bytes, copy it, then deserialize on the other side. For a 1 GB DataFrame, this means:
+
+1. Serialize: ~2 seconds + 1 GB memory
+2. Copy: ~0.5 seconds
+3. Deserialize: ~2 seconds + 1 GB memory
+
+You've spent 4.5 seconds and doubled your memory usage just to *move* the data.
+
+<MermaidDiagram chart={`graph LR
+    P1[Process 1\n1 GB DataFrame] -->|"pickle\n~2s"| B[Bytes\n1 GB copy]
+    B -->|"copy\n~0.5s"| P2[Process 2\nunpickle ~2s]
+    style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## What Ray Does Differently
+
+Ray solves both problems:
+
+1. **No GIL limitation** — Ray tasks run in separate worker processes automatically
+2. **Shared memory** — Ray's object store uses shared memory (Apache Arrow format), so data doesn't need to be copied between workers
+
+This is why Ray exists: **it gives you the parallelism of multiprocessing without the serialization overhead**.

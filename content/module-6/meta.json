@@ -1,0 +1,13 @@
+{
+  "id": 6,
+  "title": "Real-World Projects",
+  "description": "Complete end-to-end projects tying together multiple concepts",
+  "color": "#ecc94b",
+  "lessons": [
+    { "slug": "01-image-pipeline", "title": "Image Processing Pipeline", "description": "Read, resize, augment, infer, write", "estimatedMinutes": 25, "diagramTypes": ["pipeline", "architecture"], "hasCode": true, "hasQuiz": false },
+    { "slug": "02-llm-batch-inference", "title": "LLM Batch Inference", "description": "GPU actors processing text at scale", "estimatedMinutes": 25, "diagramTypes": ["pipeline", "resource"], "hasCode": true, "hasQuiz": false },
+    { "slug": "03-etl-pipeline", "title": "ETL Pipeline", "description": "Parquet to transformed partitioned output", "estimatedMinutes": 20, "diagramTypes": ["pipeline", "data-flow"], "hasCode": true, "hasQuiz": false },
+    { "slug": "04-serve-online", "title": "Ray Data + Ray Serve Online", "description": "Real-time inference endpoint", "estimatedMinutes": 25, "diagramTypes": ["deployment", "pipeline"], "hasCode": true, "hasQuiz": false },
+    { "slug": "05-performance-benchmarking", "title": "Performance Benchmarking", "description": "Compare approaches, measure throughput", "estimatedMinutes": 20, "diagramTypes": ["chart", "comparison"], "hasCode": true, "hasQuiz": false }
+  ]
+}

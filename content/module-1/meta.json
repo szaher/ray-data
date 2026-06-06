@@ -1,0 +1,12 @@
+{
+  "id": 1,
+  "title": "Foundations",
+  "description": "Why distributed computing exists, Python's limitations, and how Ray solves them",
+  "color": "#68d391",
+  "lessons": [
+    { "slug": "01-why-distributed", "title": "Why Distributed Computing?", "description": "Single-machine limits, data growth, and compute needs", "estimatedMinutes": 10, "diagramTypes": ["architecture", "comparison"], "hasCode": false, "hasQuiz": true },
+    { "slug": "02-gil-problem", "title": "The GIL Problem & Python's Limits", "description": "Why Python can't just use threads", "estimatedMinutes": 12, "diagramTypes": ["flowchart", "bottleneck"], "hasCode": false, "hasQuiz": true },
+    { "slug": "03-map-reduce", "title": "Map-Reduce & Data Parallelism", "description": "The foundational pattern: split, process, combine", "estimatedMinutes": 15, "diagramTypes": ["flowchart", "data-flow"], "hasCode": true, "hasQuiz": true },
+    { "slug": "04-rays-big-idea", "title": "Ray's Big Idea", "description": "Architecture overview: driver, workers, object store, scheduler", "estimatedMinutes": 15, "diagramTypes": ["architecture"], "hasCode": false, "hasQuiz": true }
+  ]
+}

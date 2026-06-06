@@ -1,0 +1,14 @@
+{
+  "id": 3,
+  "title": "Ray Data Basics",
+  "description": "The Dataset API: reading, transforming, and consuming data",
+  "color": "#b794f4",
+  "lessons": [
+    { "slug": "01-what-is-ray-data", "title": "What is Ray Data?", "description": "The Dataset concept and when to use it", "estimatedMinutes": 10, "diagramTypes": ["comparison", "architecture"], "hasCode": false, "hasQuiz": true },
+    { "slug": "02-reading-data", "title": "Reading Data", "description": "read_csv, read_parquet, read_json, read_images", "estimatedMinutes": 15, "diagramTypes": ["data-flow"], "hasCode": true, "hasQuiz": true },
+    { "slug": "03-transformations", "title": "Transformations", "description": "map, map_batches, filter, flat_map", "estimatedMinutes": 18, "diagramTypes": ["pipeline", "comparison"], "hasCode": true, "hasQuiz": true },
+    { "slug": "04-consuming-data", "title": "Consuming Data", "description": "iter_batches, iter_torch_batches, show, take", "estimatedMinutes": 12, "diagramTypes": ["data-flow"], "hasCode": true, "hasQuiz": true },
+    { "slug": "05-schemas-types", "title": "Schemas & Types", "description": "Arrow-based type system", "estimatedMinutes": 10, "diagramTypes": ["schema"], "hasCode": true, "hasQuiz": true },
+    { "slug": "06-lazy-execution", "title": "Lazy Execution & Materialization", "description": "Deferred execution and when it actually runs", "estimatedMinutes": 15, "diagramTypes": ["execution-graph"], "hasCode": true, "hasQuiz": true }
+  ]
+}

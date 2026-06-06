@@ -1,0 +1,13 @@
+{
+  "id": 5,
+  "title": "Advanced",
+  "description": "Internals: execution plans, memory, custom datasources, fault tolerance",
+  "color": "#fc8181",
+  "lessons": [
+    { "slug": "01-execution-plans", "title": "Execution Plans & Operator Fusion", "description": "Logical vs physical plans, optimization rules", "estimatedMinutes": 18, "diagramTypes": ["tree", "optimization"], "hasCode": true, "hasQuiz": true },
+    { "slug": "02-memory-management", "title": "Memory Management", "description": "Block sizes, backpressure, tuning knobs", "estimatedMinutes": 18, "diagramTypes": ["memory", "tuning"], "hasCode": true, "hasQuiz": true },
+    { "slug": "03-custom-datasources", "title": "Custom Datasources", "description": "Writing your own Datasource", "estimatedMinutes": 20, "diagramTypes": ["interface", "data-flow"], "hasCode": true, "hasQuiz": true },
+    { "slug": "04-fault-tolerance", "title": "Fault Tolerance & Lineage", "description": "Task retries and object reconstruction", "estimatedMinutes": 15, "diagramTypes": ["lineage", "recovery"], "hasCode": true, "hasQuiz": true },
+    { "slug": "05-shuffles-aggregations", "title": "Shuffles & Aggregations", "description": "sort, groupby, repartition", "estimatedMinutes": 15, "diagramTypes": ["shuffle", "comparison"], "hasCode": true, "hasQuiz": true }
+  ]
+}

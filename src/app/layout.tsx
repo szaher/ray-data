@@ -17,7 +17,14 @@ export default async function RootLayout({
   const curriculum = await getCurriculum();
 
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("ray-data-academy-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light":t;document.documentElement.setAttribute("data-theme",d)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`,
+          }}
+        />
+      </head>
       <body className="min-h-screen flex flex-col">
         <Header />
         <div className="flex flex-1 min-h-0">

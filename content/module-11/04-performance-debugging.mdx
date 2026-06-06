@@ -1,0 +1,334 @@
+---
+title: "Performance Debugging"
+quiz:
+  - question: "What is the first thing you should check when a Ray Data pipeline is running slower than expected?"
+    options:
+      - "The Python version"
+      - "The output of ds.stats() to find the slowest operator"
+      - "The number of files on disk"
+      - "The network latency between nodes"
+    correctIndex: 1
+    explanation: "ds.stats() gives you a breakdown of execution time per operator, including wall clock time, rows processed, and throughput. It immediately tells you which operator is the bottleneck so you can focus your optimization efforts there."
+  - question: "When should you prefer map_batches() over map()?"
+    options:
+      - "Always, because it is faster in every case"
+      - "When you need to process rows one at a time"
+      - "When your operation can be vectorized using NumPy, Pandas, or similar batch operations"
+      - "When you have fewer than 100 rows"
+    correctIndex: 2
+    explanation: "map_batches() gives your function an entire batch of rows at once, allowing you to use vectorized NumPy/Pandas operations that are 10-100x faster than Python loops. Use map() only when you truly need row-by-row processing with different logic per row."
+---
+
+## The Performance Debugging Process
+
+Slow pipelines are frustrating, but there is a systematic way to find and fix the bottleneck. Follow these four steps in order.
+
+<MermaidDiagram chart={`flowchart LR
+    S1["Step 1\nds.stats()"] --> S2["Step 2\nCheck\nParallelism"]
+    S2 --> S3["Step 3\nCheck\nData Skew"]
+    S3 --> S4["Step 4\nCheck\nI/O"]
+    S1 --> F1["Find the slow\noperator"]
+    S2 --> F2["Are all CPUs\nbeing used?"]
+    S3 --> F3["Are blocks\nevenly sized?"]
+    S4 --> F4["Is read/write\nthe bottleneck?"]
+    style S1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S2 fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style S3 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style S4 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+---
+
+## Step 1: Check ds.stats()
+
+The `stats()` method is your most powerful profiling tool. It shows time spent in each operator, rows processed, and throughput.
+
+<CodeBlock code={`import ray
+ds = ray.data.read_parquet("s3://bucket/data/")
+ds = ds.map_batches(preprocess, batch_size=1024)
+ds = ds.map_batches(featurize, batch_size=512)
+ds = ds.map_batches(predict, batch_size=256)
+result = ds.materialize()
+# Print the execution stats
+print(result.stats())
+# Example output:
+# Operator 1 ReadParquet: 100 blocks executed in 12.3s
+#   * Wall time: 12.3s total, 123ms avg
+#   * Rows: 10,000,000 total, 100,000 per block
+#   * Output: 4.5 GiB total, 45 MiB avg
+#   * Throughput: 813,008 rows/s
+#
+# Operator 2 MapBatches(preprocess): 100 blocks in 8.1s
+#   * Wall time: 8.1s total, 81ms avg
+#   * Rows: 10,000,000 total
+#   * Throughput: 1,234,568 rows/s
+#
+# Operator 3 MapBatches(featurize): 100 blocks in 45.2s   <-- BOTTLENECK!
+#   * Wall time: 45.2s total, 452ms avg
+#   * Rows: 10,000,000 total
+#   * Throughput: 221,239 rows/s
+#
+# Operator 4 MapBatches(predict): 100 blocks in 5.6s
+#   * Wall time: 5.6s total, 56ms avg
+#   * Throughput: 1,785,714 rows/s`} language="python" filename="check_stats.py" />
+
+In this example, `featurize` takes 45.2 seconds out of a total of 71.2 seconds. That is where you should focus.
+
+---
+
+## Step 2: Check Parallelism
+
+If your pipeline is slow, you may not be using all available cores. Check how many tasks are running in parallel.
+
+<CodeBlock code={`import ray
+# Check available resources
+print(ray.cluster_resources())
+# {'CPU': 32.0, 'GPU': 4.0, 'memory': 128000000000.0}
+# Check how many blocks your dataset has
+ds = ray.data.read_parquet("data/")
+print(f"Blocks: {ds.num_blocks()}")  # If this is 4 and you have 32 CPUs, you're wasting 28 CPUs!
+# Fix: Repartition to match your parallelism
+ds = ds.repartition(128)  # Now 128 blocks can run on 32 CPUs in 4 waves
+# Or set parallelism at read time
+ds = ray.data.read_parquet("data/", parallelism=128)
+# Verify: Check stats to see if tasks are running in parallel
+result = ds.map_batches(process, batch_size=1024).materialize()
+print(result.stats())
+# Look for: wall time (total) vs. wall time (avg per block)
+# If total ≈ avg * num_blocks, tasks ran sequentially (bad!)
+# If total ≈ avg * num_blocks / num_cpus, tasks ran in parallel (good!)`} language="python" filename="check_parallelism.py" />
+
+---
+
+## Step 3: Check Data Skew
+
+Data skew means some blocks are much larger than others. The pipeline runs at the speed of the slowest block.
+
+<CodeBlock code={`import ray
+ds = ray.data.read_parquet("data/")
+# Check block sizes for skew
+stats = ds.materialize().stats()
+print(stats)
+# Look at the block size distribution:
+#   * Output: 4.5 GiB total
+#   * Min block size: 2 MiB        <-- tiny block
+#   * Max block size: 1.2 GiB      <-- huge block!
+#   * Avg block size: 45 MiB
+#   * Median block size: 40 MiB
+# Max is 26x the average — severe skew!
+# Fix: Repartition to create evenly-sized blocks
+ds = ds.repartition(100)  # redistributes data evenly
+# Or use a shuffle-based repartition for severe skew
+ds = ds.random_shuffle()  # full shuffle, then repartition
+ds = ds.repartition(100)`} language="python" filename="check_skew.py" />
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Before: Skewed Blocks"
+        B1["Block 1\n1.2 GB"]
+        B2["Block 2\n40 MB"]
+        B3["Block 3\n35 MB"]
+        B4["Block 4\n2 MB"]
+    end
+    subgraph "After: Even Blocks"
+        E1["Block 1\n320 MB"]
+        E2["Block 2\n320 MB"]
+        E3["Block 3\n320 MB"]
+        E4["Block 4\n317 MB"]
+    end
+    B1 --> R[repartition]
+    B2 --> R
+    B3 --> R
+    B4 --> R
+    R --> E1
+    R --> E2
+    R --> E3
+    R --> E4
+    style B1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style B4 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style E1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E4 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+---
+
+## Step 4: Check I/O Bottlenecks
+
+Sometimes the bottleneck is reading or writing data, not processing it.
+
+<CodeBlock code={`import ray
+import time
+# Time just the read
+start = time.time()
+ds = ray.data.read_parquet("s3://bucket/data/")
+ds = ds.materialize()
+read_time = time.time() - start
+print(f"Read time: {read_time:.1f}s")
+# Time just the compute
+start = time.time()
+ds = ds.map_batches(process, batch_size=1024)
+ds = ds.materialize()
+compute_time = time.time() - start
+print(f"Compute time: {compute_time:.1f}s")
+# Time just the write
+start = time.time()
+ds.write_parquet("s3://bucket/output/")
+write_time = time.time() - start
+print(f"Write time: {write_time:.1f}s")
+# If read_time >> compute_time:
+#   - Use a faster storage format (Parquet instead of CSV)
+#   - Use a faster storage system (local SSD instead of S3)
+#   - Increase read parallelism
+print(f"Read: {read_time:.1f}s | Compute: {compute_time:.1f}s | Write: {write_time:.1f}s")`} language="python" filename="check_io.py" />
+
+---
+
+## map() vs. map_batches()
+
+Choosing the right method can give you a 10-100x speedup for operations that can be vectorized.
+
+**Use `map()`** when you need to process rows individually with different logic per row.
+
+**Use `map_batches()`** when your operation can use NumPy, Pandas, or PyTorch batch operations.
+
+<CodeBlock code={`import ray
+import numpy as np
+ds = ray.data.read_parquet("data/")
+# SLOW: map() with Python per-row loop — ~100K rows/sec
+def normalize_row(row):
+    row["value"] = (row["value"] - 0.5) / 0.25
+    return row
+ds_slow = ds.map(normalize_row)
+# FAST: map_batches() with NumPy vectorization — ~10M rows/sec
+def normalize_batch(batch):
+    batch["value"] = (batch["value"] - 0.5) / 0.25
+    return batch
+ds_fast = ds.map_batches(normalize_batch, batch_format="numpy", batch_size=4096)
+# FAST: map_batches() with Pandas vectorization
+def normalize_pandas(df):
+    df["value"] = (df["value"] - 0.5) / 0.25
+    return df
+ds_fast2 = ds.map_batches(normalize_pandas, batch_format="pandas", batch_size=4096)`} language="python" filename="map_vs_map_batches.py" />
+
+<MermaidDiagram chart={`graph LR
+    subgraph "map() — Row by Row"
+        R1[Row 1] --> F1[Python function]
+        R2[Row 2] --> F2[Python function]
+        R3[Row 3] --> F3[Python function]
+        R4[Row N] --> F4[Python function]
+    end
+    subgraph "map_batches() — Vectorized"
+        B[4096 Rows\nas NumPy array] --> NP["np.operation()\nprocesses all at once"]
+    end
+    F1 --> S1["~100K rows/sec"]
+    NP --> S2["~10M rows/sec"]
+    style S1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style S2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style B fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style NP fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+---
+
+## Operator Fusion
+
+Ray Data automatically fuses compatible operators into a single execution step, reducing overhead. Check whether fusion is happening with the execution plan.
+
+<CodeBlock code={`import ray
+ds = ray.data.read_parquet("data/")
+ds = ds.map_batches(step1, batch_size=1024)
+ds = ds.map_batches(step2, batch_size=1024)
+ds = ds.map_batches(step3, batch_size=1024)
+# Check the execution plan to see fusion
+print(ds.explain())
+# Output might show:
+# ReadParquet -> MapBatches(step1) -> MapBatches(step2) -> MapBatches(step3)
+# Fused operators: MapBatches(step1)->MapBatches(step2)->MapBatches(step3)
+#
+# Fused = good! Data flows through all three functions in one pass.
+# Not fused = each operator materializes intermediate results.
+# Fusion breaks when:
+# - Operators have different resource requirements (e.g., num_gpus)
+# - There's a repartition() or random_shuffle() between operators
+# - Batch sizes differ between operators
+# To maximize fusion, use the same batch_size and resource requirements
+ds = ds.map_batches(step1, batch_size=1024)
+ds = ds.map_batches(step2, batch_size=1024)  # same batch_size = fusable
+ds = ds.map_batches(step3, batch_size=1024)  # same batch_size = fusable`} language="python" filename="operator_fusion.py" />
+
+---
+
+## Profiling Tools
+
+When `ds.stats()` is not enough, use dedicated profiling tools.
+
+### py-spy: Zero-Overhead Profiling
+
+<CodeBlock code={`# Install py-spy
+pip install py-spy
+# Profile your Ray script from outside (no code changes needed)
+py-spy record -o profile.svg -- python my_pipeline.py
+# This generates a flame graph SVG showing where time is spent
+# To profile a running Ray worker, find its PID:
+ps aux | grep ray::MapBatches
+# Then attach py-spy to it:
+py-spy top --pid 12345`} language="bash" filename="terminal" />
+
+### Built-in Timing
+
+<CodeBlock code={`import ray
+import time
+ds = ray.data.read_parquet("data/")
+# Add timing around specific operators
+start = time.time()
+ds = ds.map_batches(expensive_operation, batch_size=512)
+ds = ds.materialize()
+elapsed = time.time() - start
+print(f"expensive_operation: {elapsed:.2f}s")
+# Profile inside your function
+def timed_process(batch):
+    t0 = time.time()
+    result = step_a(batch)
+    t1 = time.time()
+    result = step_b(result)
+    t2 = time.time()
+    print(f"step_a: {t1-t0:.3f}s, step_b: {t2-t1:.3f}s")
+    return result
+ds = ds.map_batches(timed_process, batch_size=512)`} language="python" filename="timing.py" />
+
+---
+
+## Performance Optimization Summary
+
+<MermaidDiagram chart={`flowchart TD
+    SLOW["Pipeline is slow"] --> STATS["Run ds.stats()"]
+    STATS --> FIND["Find slowest operator"]
+    FIND --> Q1{"Is it I/O\n(read/write)?"}
+    Q1 -->|Yes| IO["Use Parquet format\nIncrease read parallelism\nUse faster storage"]
+    Q1 -->|No| Q2{"Is it compute\n(map/map_batches)?"}
+    Q2 -->|Yes| Q3{"Using map()\nrow-by-row?"}
+    Q3 -->|Yes| VEC["Switch to map_batches()\nwith vectorized ops"]
+    Q3 -->|No| Q4{"Low parallelism?\n(few blocks)"}
+    Q4 -->|Yes| REPART["Repartition to more blocks\nMatch CPU count"]
+    Q4 -->|No| Q5{"Data skew?\n(uneven blocks)"}
+    Q5 -->|Yes| BALANCE["Repartition to\neven block sizes"]
+    Q5 -->|No| PROFILE["Profile with py-spy\nOptimize the function itself"]
+    style SLOW fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style IO fill:#68d391,stroke:#68d391,color:#1a1d27
+    style VEC fill:#68d391,stroke:#68d391,color:#1a1d27
+    style REPART fill:#68d391,stroke:#68d391,color:#1a1d27
+    style BALANCE fill:#68d391,stroke:#68d391,color:#1a1d27
+    style PROFILE fill:#68d391,stroke:#68d391,color:#1a1d27
+    style STATS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+The most common performance wins, in order of likelihood:
+
+1. **Switch from `map()` to `map_batches()` with vectorized ops** — 10-100x speedup
+2. **Increase parallelism** (repartition to more blocks) — scales with CPU count
+3. **Fix data skew** (repartition after reads) — fixes straggler tasks
+4. **Use Parquet instead of CSV/JSON** — 2-10x faster I/O
+5. **Tune batch size** — balance between overhead and memory usage
+6. **Ensure operator fusion** — avoid unnecessary intermediate materialization

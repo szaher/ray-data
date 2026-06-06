@@ -1,0 +1,261 @@
+---
+title: "Debugging with the Dashboard"
+quiz:
+  - question: "What is the first indicator of an out-of-memory (OOM) problem visible on the Ray Dashboard?"
+    options:
+      - "The Jobs tab shows all tasks as PENDING"
+      - "The Metrics tab shows object store memory near capacity and rising spilled bytes"
+      - "The Actors tab shows all actors as ALIVE"
+      - "The Logs tab shows no output"
+    correctIndex: 1
+    explanation: "The earliest OOM indicator on the dashboard is in the Metrics tab: object store memory approaching its limit combined with a rising ray_data_spilled_bytes metric. Spilling means blocks are being written to disk because the object store is full, which precedes actual OOM kills."
+  - question: "When debugging a straggler task, which dashboard view shows individual task execution times?"
+    options:
+      - "The Cluster tab's node table"
+      - "The Serve tab's replica list"
+      - "The Jobs tab's task timeline (Gantt chart) view"
+      - "The Metrics tab's CPU utilization graph"
+    correctIndex: 2
+    explanation: "The Jobs tab's task timeline provides a Gantt-chart view of every task's start time and duration. Straggler tasks appear as long bars that extend far beyond the cluster of short bars, making them easy to spot visually."
+---
+
+## A Systematic Approach to Debugging
+
+When a Ray Data pipeline fails, hangs, or performs poorly, the dashboard is your primary diagnostic tool. Instead of guessing, follow a systematic workflow: **observe the symptom, go to the right tab, form a diagnosis, apply a fix**.
+
+<MermaidDiagram chart={`flowchart TD
+    START["Pipeline Problem"] --> SYM{"What is the\nsymptom?"}
+    SYM -->|"Job failed\nwith error"| JOBS_ERR["Jobs Tab\nRead error trace"]
+    SYM -->|"Pipeline is\nvery slow"| METRICS_SLOW["Metrics Tab\nCheck resource utilization"]
+    SYM -->|"Pipeline hangs\nno progress"| CLUSTER_HANG["Cluster Tab\nCheck node health"]
+    SYM -->|"OOM killed"| METRICS_OOM["Metrics Tab\nCheck memory + spilling"]
+    JOBS_ERR --> DIAG1["Read full traceback\nIdentify failing operator"]
+    DIAG1 --> FIX1["Fix UDF code\nor input data"]
+    METRICS_SLOW --> CHECK_CPU{"CPUs near\n100%?"}
+    CHECK_CPU -->|Yes| DIAG2A["Compute-bound bottleneck"]
+    DIAG2A --> FIX2A["Increase concurrency\nor add nodes"]
+    CHECK_CPU -->|No| DIAG2B["I/O or scheduling\nbottleneck"]
+    DIAG2B --> FIX2B["Check data source\nthrottle or block sizes"]
+    CLUSTER_HANG --> CHECK_NODES{"All nodes\nALIVE?"}
+    CHECK_NODES -->|No| DIAG3A["Dead node caused\ntask failures"]
+    DIAG3A --> FIX3A["Restart node\nenable fault tolerance"]
+    CHECK_NODES -->|Yes| DIAG3B["Deadlock or\nresource starvation"]
+    DIAG3B --> FIX3B["Check actor resources\nand task dependencies"]
+    METRICS_OOM --> DIAG4["Object store full\nblocks spilling to disk"]
+    DIAG4 --> FIX4["Reduce block size\nadd backpressure\nadd memory"]
+    style START fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style JOBS_ERR fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style METRICS_SLOW fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style CLUSTER_HANG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style METRICS_OOM fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style FIX1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX2A fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX2B fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX3A fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX3B fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX4 fill:#68d391,stroke:#68d391,color:#1a1d27`} />
+
+## Diagnosing Out-of-Memory (OOM)
+
+OOM is the most common failure mode for data pipelines. The dashboard gives you multiple signals before a hard crash occurs.
+
+**Step 1: Check the Metrics tab.** Look at the object store memory graph. If it is climbing toward the limit (default is 30% of system memory), your pipeline is producing blocks faster than it can consume them. The `ray_data_spilled_bytes` metric tells you if spilling has started — once spilling begins, performance degrades significantly.
+
+**Step 2: Check the Cluster tab.** Look at the system memory column for each node. If any node shows memory usage above 90%, that node is at risk of OOM. The operating system may kill Ray worker processes, which appear as DEAD workers.
+
+**Step 3: Check the Jobs tab.** If a task was OOM-killed, the job will show a failed task with an error message like `Worker killed by OOM killer` or `RayOutOfMemoryError`. Click into the failed task to see which operator and which block triggered the failure.
+
+**Common fixes for OOM:**
+
+<CodeBlock code={`import ray
+# Fix 1: Reduce block size so fewer bytes are in flight
+ds = ray.data.read_parquet("s3://bucket/data/", override_num_blocks=200)
+# Fix 2: Limit concurrent tasks to reduce memory pressure
+ds = ds.map(heavy_transform, concurrency=4)
+# Fix 3: Enable more aggressive backpressure
+ctx = ray.data.DataContext.get_current()
+ctx.target_max_block_size = 64 * 1024 * 1024  # 64MB blocks
+# Fix 4: Increase object store memory (at ray.init time)
+ray.init(
+    _system_config={
+        "object_store_memory": 10 * 1024 * 1024 * 1024,  # 10GB
+    }
+)
+# Fix 5: Materialize and consume incrementally instead of all at once
+for batch in ds.iter_batches(batch_size=1024):
+    process_and_save(batch)`} language="python" filename="fix_oom.py" />
+
+## Finding Straggler Tasks
+
+Stragglers are tasks that take much longer than their peers, holding up the entire pipeline. They are easy to spot in the dashboard.
+
+**Step 1: Open the Jobs tab** and click into your running job. Switch to the **Task Timeline** view.
+
+**Step 2: Look for outliers.** In the Gantt chart, most tasks for an operator should have similar bar lengths. A straggler appears as one or two bars that extend far beyond the rest. Hover over the long bar to see:
+- Task ID
+- Duration (compare to the median)
+- Node IP (is it always the same node?)
+- Input block size (was this block much larger?)
+
+**Step 3: Determine the cause.**
+
+<CodeBlock code={`import ray
+# Straggler cause 1: Data skew — some blocks have more data
+# Diagnosis: Check block sizes in stats()
+ds = ray.data.read_parquet("s3://bucket/skewed-data/")
+result = ds.map(transform).materialize()
+print(result.stats())
+# Look for: "Block sizes: min=1MB, max=800MB, mean=50MB"
+# The 800MB block is 16x larger than average — that's your straggler
+# Fix: Repartition to equalize block sizes
+ds = ray.data.read_parquet("s3://bucket/skewed-data/")
+ds = ds.repartition(100)  # Redistribute into equal blocks
+result = ds.map(transform).materialize()
+# Straggler cause 2: Slow node — one machine has degraded hardware
+# Diagnosis: In the timeline, stragglers always run on the same node IP
+# Fix: Drain the node or enable speculative execution
+# Straggler cause 3: Noisy neighbor — another process using resources
+# Diagnosis: Check Cluster tab for the straggler's node
+# Fix: Isolate Ray workers with cgroups or dedicated nodes`} language="python" filename="fix_stragglers.py" />
+
+## Reading Error Traces
+
+When a job fails, the Jobs tab shows the complete Python traceback. Here is how to extract maximum information from it.
+
+**Step 1: Open the Jobs tab** and find the failed job (status: FAILED, shown in red).
+
+**Step 2: Click the job** to expand its detail view. The error trace appears at the bottom. It shows:
+- The Python exception type and message
+- The full stack trace from your UDF code
+- The Ray wrapper that shows which task, operator, and block failed
+
+**Step 3: Trace back to your code.** The stack trace includes your function name and line number. Common patterns:
+
+<CodeBlock code={`# Pattern 1: KeyError in a map function
+# Error: KeyError: 'timestamp'
+# Diagnosis: Some rows don't have the expected column
+ds = ds.map(lambda row: {
+    **row,
+    "hour": row["timestamp"].hour,  # Fails if "timestamp" is missing
+})
+# Fix: Add defensive checks
+ds = ds.map(lambda row: {
+    **row,
+    "hour": row["timestamp"].hour if "timestamp" in row else None,
+})
+# Pattern 2: TypeError from mismatched types
+# Error: TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+# Diagnosis: A column contains None values
+ds = ds.map(lambda row: {
+    **row,
+    "total": row["price"] + row["tax"],  # Fails if price or tax is None
+})
+# Fix: Handle None values
+ds = ds.map(lambda row: {
+    **row,
+    "total": (row["price"] or 0) + (row["tax"] or 0),
+})
+# Pattern 3: Import error in a remote task
+# Error: ModuleNotFoundError: No module named 'transformers'
+# Diagnosis: The worker node doesn't have the required package
+# Fix: Specify runtime environment
+ray.init(runtime_env={"pip": ["transformers"]})`} language="python" filename="common_errors.py" />
+
+## Log Viewing
+
+The Dashboard's Logs tab gives you access to stdout and stderr from every process in the cluster without SSH access.
+
+**Navigation:** The Logs tab has a file browser on the left showing log files organized by node. Each node has:
+- `raylet.out` / `raylet.err` — the raylet scheduler logs
+- `gcs_server.out` / `gcs_server.err` — GCS logs (head node only)
+- `worker-*.out` / `worker-*.err` — one file per worker process
+- `dashboard.log` — dashboard server logs
+
+**Finding task logs:** When you click into a specific task from the Jobs tab, a "View Logs" link takes you directly to the worker log file that contains that task's output. Any `print()` statements in your UDF appear here.
+
+<CodeBlock code={`import ray
+# Everything printed in a task appears in the Logs tab
+@ray.remote
+def debug_transform(batch):
+    print(f"[DEBUG] Received batch with {len(batch)} rows")
+    print(f"[DEBUG] Columns: {list(batch.keys())}")
+    print(f"[DEBUG] First row: {batch[0]}")
+    result = transform(batch)
+    print(f"[DEBUG] Output {len(result)} rows")
+    return result
+# To log with timestamps and levels, use Python logging
+import logging
+logger = logging.getLogger("my_pipeline")
+@ray.remote
+def better_debug_transform(batch):
+    logger.info(f"Processing batch: {len(batch)} rows")
+    logger.debug(f"Schema: {list(batch.keys())}")
+    return transform(batch)`} language="python" filename="debug_logging.py" />
+
+## Actor Debugging
+
+Actors are long-running stateful objects that can fail, restart, and accumulate state over time. The Actors tab is purpose-built for debugging them.
+
+**What you see for each actor:**
+- **Class name** and **actor ID**
+- **State** — ALIVE, DEAD, or RESTARTING
+- **Node IP** — which machine it runs on
+- **Restart count** — how many times it has been restarted (if `max_restarts` is set)
+- **Resource usage** — CPU and memory consumed by this actor
+- **Pending calls** — number of method calls waiting in the actor's queue
+
+**Common actor problems:**
+
+- **Actor keeps restarting** — high restart count with ALIVE state means the actor crashes and auto-recovers. Check its logs for the crash cause. Each restart loses in-memory state unless you implement checkpointing.
+
+- **Actor is DEAD** — it crashed and was not configured to restart. Click the actor to see the death cause. Set `max_restarts` to enable automatic recovery.
+
+- **Actor queue growing** — a rising number of pending calls means the actor cannot process requests fast enough. Consider increasing `max_concurrency` or sharding across multiple actor replicas.
+
+## The Complete Debugging Workflow
+
+Here is a step-by-step checklist you can follow whenever a pipeline has problems:
+
+<CodeBlock code={`# Step 1: Get the high-level status
+# Open Dashboard -> Jobs tab
+# Is the job RUNNING, FAILED, or stuck?
+# Step 2: If FAILED, read the error trace
+# Click the failed job -> scroll to error
+# Note the exception type, message, and which operator failed
+# Step 3: If SLOW, check resource utilization
+# Dashboard -> Metrics tab (or Cluster tab)
+# Are CPUs saturated? Is memory high? Is the object store spilling?
+# Step 4: If HANGING, check cluster health
+# Dashboard -> Cluster tab
+# Are all nodes ALIVE? Are there dead workers?
+# Step 5: Drill into specific tasks
+# Jobs tab -> click job -> Task Timeline
+# Look for stragglers, failed tasks, or tasks stuck in PENDING
+# Step 6: Read logs for the problem task
+# Click the task -> View Logs
+# Look for error messages, warnings, or unexpected output
+# Step 7: Check programmatic stats
+import ray
+ds = ray.data.read_parquet("s3://bucket/data/")
+ds = ds.map(my_transform)
+result = ds.materialize()
+stats = result.stats()
+print(stats)
+# Look for:
+# - Operators with high wall time relative to others
+# - Large block size variance (min vs max)
+# - High spilled bytes
+# - Low throughput on specific operators`} language="python" filename="debug_checklist.py" />
+
+## Summary: Dashboard Tab Quick Reference
+
+| Symptom | Go To | Look For |
+|---------|-------|----------|
+| Job failed | Jobs tab | Error traceback, failing operator |
+| Pipeline slow | Metrics tab | CPU/GPU utilization, spilling |
+| Pipeline hanging | Cluster tab | Dead nodes, resource exhaustion |
+| OOM crashes | Metrics tab | Object store memory, spill bytes |
+| Straggler tasks | Jobs tab (timeline) | Outlier task durations |
+| Actor crashes | Actors tab | Restart count, DEAD state |
+| Missing output | Logs tab | Task stdout/stderr |
+| Data quality | Jobs tab + stats() | Row counts per operator |

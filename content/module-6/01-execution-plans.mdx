@@ -1,0 +1,103 @@
+---
+title: "Execution Plans & Operator Fusion"
+quiz:
+  - question: "What does operator fusion accomplish in a Ray Data execution plan?"
+    options:
+      - "It merges multiple datasets into one"
+      - "It combines consecutive compatible operators into a single physical stage to avoid materialization overhead"
+      - "It distributes operators across more workers"
+      - "It converts Python UDFs into C++ for speed"
+    correctIndex: 1
+    explanation: "Operator fusion merges consecutive compatible operators (e.g., back-to-back maps) into a single physical stage, eliminating intermediate materialization and reducing scheduling overhead."
+  - question: "Which method lets you inspect the optimized execution plan of a Dataset?"
+    options:
+      - "ds.show_plan()"
+      - "ds.debug()"
+      - "ds.explain()"
+      - "ds.describe()"
+    correctIndex: 2
+    explanation: "ds.explain() prints both the logical plan (what you wrote) and the optimized physical plan (what Ray will actually execute), showing which operators were fused."
+---
+
+## From Logical Plan to Physical Execution
+
+When you chain operations on a Ray Dataset, nothing executes immediately. Ray Data builds a **logical plan** — a DAG of operators representing your intent. Only when you trigger an action (like `take()`, `write`, or `iter_batches()`) does the planner convert the logical plan into an optimized **physical plan**.
+
+<MermaidDiagram chart={`graph TD
+    L1["Logical: ReadParquet"] --> L2["Logical: Map(parse)"]
+    L2 --> L3["Logical: Map(normalize)"]
+    L3 --> L4["Logical: Filter(valid)"]
+    L4 --> L5["Logical: Write"]
+    L1 -.->|"Optimizer"| P1["Physical: ReadParquet + Map(parse)"]
+    P1 -.-> P2["Physical: Map(normalize) + Filter(valid)"]
+    P2 -.-> P3["Physical: Write"]
+    style L1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style L2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style L3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style L4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style L5 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style P2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style P3 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Inspecting Plans with `.explain()`
+
+You can inspect what Ray Data will actually do before triggering execution.
+
+<CodeBlock language="python" code={`import ray
+
+ds = (
+    ray.data.read_parquet("s3://bucket/data/")
+    .map(lambda row: {**row, "name": row["name"].lower()})
+    .filter(lambda row: row["age"] > 18)
+    .map_batches(lambda batch: batch)
+)
+
+# Print the logical and physical plans
+ds.explain()
+# == Logical Plan ==
+# ReadParquet -> Map(fn) -> Filter(fn) -> MapBatches(fn)
+#
+# == Optimized Physical Plan ==
+# ReadParquet -> MapBatches(fn) [fused: Map, Filter, MapBatches]`} />
+
+## Operator Fusion Rules
+
+The optimizer fuses operators when the following conditions are met:
+
+- **One-to-one operators** like `map`, `filter`, and `map_batches` can be fused together into a single stage.
+- **Read + Map fusion** — a read operator followed by map-like operators can be fused so transformation happens during reading, avoiding a full materialization pass.
+- **Fusion breaks** at shuffle boundaries (`repartition`, `random_shuffle`, `sort`, `groupby`) because data must be fully materialized and redistributed.
+
+<CodeBlock language="python" code={`# These three map-like ops will be fused into ONE physical stage
+ds = (
+    ray.data.read_parquet("data/")
+    .map(parse_record)           # ─┐
+    .filter(is_valid)            # ─┤ fused into a single task
+    .map_batches(normalize)      # ─┘
+)
+
+# Adding a shuffle BREAKS the fusion chain
+ds = (
+    ray.data.read_parquet("data/")
+    .map(parse_record)           # ─┐ fused stage 1
+    .filter(is_valid)            # ─┘
+    .repartition(100)            # ← shuffle barrier
+    .map_batches(normalize)      # ─── fused stage 2
+)`} />
+
+## Controlling Fusion
+
+You can disable fusion or tune plan behavior via `ExecutionOptions`.
+
+<CodeBlock language="python" code={`ctx = ray.data.DataContext.get_current()
+
+# Disable operator fusion entirely (useful for debugging)
+ctx.execution_options.preserve_order = True
+
+# Force materialization between stages for debugging
+ds = ray.data.read_parquet("data/").materialize()
+ds_filtered = ds.filter(is_valid)  # starts a new plan`} />
+
+Understanding execution plans helps you reason about performance — if two stages aren't fusing when you expect them to, `explain()` will reveal why and guide your optimization.

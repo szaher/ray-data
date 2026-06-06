@@ -1,0 +1,182 @@
+---
+title: "Multi-Modal Data Pipelines"
+quiz:
+  - question: "What makes multi-modal pipelines different from single-modal ones?"
+    options:
+      - "They use more memory"
+      - "They process multiple data types (text, images, audio) in a single pipeline, each requiring different transforms"
+      - "They always require GPUs"
+      - "They can only run on a single machine"
+    correctIndex: 1
+    explanation: "Multi-modal pipelines handle heterogeneous data types within a single pipeline. Each modality (text, image, audio) requires its own preprocessing and representation, but they need to be combined for the final output."
+  - question: "How does Ray Data handle different resource requirements for different modalities?"
+    options:
+      - "It processes everything on the same workers"
+      - "It requires separate Ray clusters for each modality"
+      - "You specify per-operator resources (num_gpus, num_cpus) so image/audio processing can use GPUs while text uses CPUs"
+      - "It automatically detects the modality and assigns resources"
+    correctIndex: 2
+    explanation: "Ray Data lets you specify resource requirements per operator. This means CPU-bound text processing and GPU-bound image processing can coexist in one pipeline, with Ray scheduling each operator on the right hardware."
+---
+
+## The Multi-Modal Challenge
+
+Modern AI applications combine text, images, audio, and video. A product catalog has descriptions and photos. A medical record has clinical notes and X-rays. Processing these together in one pipeline -- instead of separate systems -- simplifies architecture and enables cross-modal features.
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Multi-Modal Input"
+        T[Text\nProduct descriptions]
+        I[Images\nProduct photos]
+        A[Audio\nCustomer reviews]
+    end
+    subgraph "Per-Modality Processing"
+        T --> TP[Text Pipeline\nTokenize + Embed\nCPU]
+        I --> IP[Image Pipeline\nResize + Embed\nGPU]
+        A --> AP[Audio Pipeline\nTranscribe + Embed\nGPU]
+    end
+    subgraph "Cross-Modal"
+        TP --> J[Join on\nproduct_id]
+        IP --> J
+        AP --> J
+        J --> OUT[Unified\nFeature Vector]
+    end
+    style T fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style I fill:#68d391,stroke:#68d391,color:#1a1d27
+    style A fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Reading Multi-Modal Data
+
+Ray Data provides specialized readers for each data type. You can read them separately and combine, or read from a structured dataset that contains mixed types.
+
+<CodeBlock language="python" code={`import ray
+
+# Read each modality from its source
+text_ds = ray.data.read_parquet("s3://catalog/descriptions/")
+image_ds = ray.data.read_images(
+    "s3://catalog/images/",
+    size=(224, 224),
+    mode="RGB",
+)
+audio_ds = ray.data.read_binary_files("s3://catalog/audio_reviews/")
+
+# Or read a single dataset with mixed columns
+# (e.g., a Parquet file with text columns and image path references)
+ds = ray.data.read_parquet("s3://catalog/products/")
+# Columns: product_id, description, image_path, audio_path`} />
+
+## Per-Modality Processing
+
+Each modality needs its own transform, potentially with different resource requirements. Ray Data lets you specify `num_gpus`, `num_cpus`, and `concurrency` per operator.
+
+<CodeBlock language="python" code={`import ray
+import numpy as np
+
+class TextEmbedder:
+    def __init__(self):
+        from sentence_transformers import SentenceTransformer
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    def __call__(self, batch):
+        batch["text_embedding"] = list(
+            self.model.encode(batch["description"].tolist())
+        )
+        return batch
+
+class ImageEmbedder:
+    def __init__(self):
+        import torch, torchvision
+        self.model = torchvision.models.resnet50(pretrained=True)
+        self.model.eval()
+        self.device = torch.device("cuda")
+        self.model.to(self.device)
+
+    def __call__(self, batch):
+        import torch
+        images = torch.tensor(
+            np.stack(batch["image"])
+        ).permute(0, 3, 1, 2).float().to(self.device)
+        with torch.no_grad():
+            batch["image_embedding"] = (
+                self.model(images).cpu().numpy().tolist()
+            )
+        return batch
+
+# Process each modality with appropriate resources
+text_ds = text_ds.map_batches(
+    TextEmbedder,
+    batch_size=256,
+    num_cpus=2,
+    concurrency=4,
+)
+
+image_ds = image_ds.map_batches(
+    ImageEmbedder,
+    batch_size=32,
+    num_gpus=1,
+    concurrency=2,
+)`} />
+
+## Joining Modalities
+
+After processing each modality, combine them using a common key. Ray Data supports `zip` for aligned datasets or you can use custom join logic.
+
+<CodeBlock language="python" code={`import ray
+import pandas as pd
+
+# Option 1: If datasets are aligned row-by-row
+combined_ds = text_ds.zip(image_ds)
+
+# Option 2: Join on a shared key using map_batches
+# First, collect one side into a lookup (for manageable sizes)
+image_lookup = {
+    row["product_id"]: row["image_embedding"]
+    for row in image_ds.iter_rows()
+}
+image_lookup_ref = ray.put(image_lookup)
+
+def join_modalities(batch, image_lookup):
+    batch["image_embedding"] = [
+        image_lookup.get(pid, None)
+        for pid in batch["product_id"]
+    ]
+    return batch
+
+enriched_ds = text_ds.map_batches(
+    join_modalities,
+    batch_size=1024,
+    fn_kwargs={"image_lookup": image_lookup_ref},
+)
+enriched_ds.write_parquet("s3://catalog/multi_modal_features/")`} />
+
+## Heterogeneous Resource Scheduling
+
+<MermaidDiagram chart={`graph LR
+    subgraph "CPU Workers"
+        C1[Worker 1\nText Embed\n2 CPUs]
+        C2[Worker 2\nText Embed\n2 CPUs]
+    end
+    subgraph "GPU Workers"
+        G1[Worker 3\nImage Embed\n1 GPU]
+        G2[Worker 4\nAudio Transcribe\n1 GPU]
+    end
+    C1 --> M[Merge\nResults]
+    C2 --> M
+    G1 --> M
+    G2 --> M
+    M --> O[Unified\nOutput]
+    style C1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style C2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style G1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style G2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style O fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Key Takeaways
+
+- Ray Data provides **specialized readers** for text, images, binary files, and more
+- Use **class-based UDFs** to load heavy models once and reuse them across batches
+- Assign **per-operator resources** (`num_gpus`, `num_cpus`) to match each modality's needs
+- Combine modalities with **`zip`** (aligned data) or **key-based joins** (shared IDs)
+- One pipeline, multiple data types -- no need for separate processing systems

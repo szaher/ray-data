@@ -38,7 +38,7 @@ export default function Quiz({ questions, onComplete }: QuizProps) {
 
   if (finished) {
     return (
-      <div className="my-6 p-6 rounded-xl bg-[var(--bg-secondary)] border border-white/[0.08]">
+      <div className="my-6 p-6 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
         <h3 className="text-lg font-semibold mb-2">Quiz Complete</h3>
         <p className="text-[var(--text-secondary)]">
           You got {score} out of {questions.length} correct.
@@ -48,7 +48,7 @@ export default function Quiz({ questions, onComplete }: QuizProps) {
   }
 
   return (
-    <div className="my-6 p-6 rounded-xl bg-[var(--bg-secondary)] border border-white/[0.08]">
+    <div className="my-6 p-6 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
       <div className="text-xs text-[var(--text-secondary)] mb-3">
         Question {currentIndex + 1} of {questions.length}
       </div>
@@ -56,7 +56,7 @@ export default function Quiz({ questions, onComplete }: QuizProps) {
 
       <div className="space-y-2 mb-4">
         {q.options.map((opt, i) => {
-          let style = "border-white/[0.08] hover:border-white/[0.16]";
+          let style = "border-[var(--border)] hover:border-[var(--border-hover)]";
           if (submitted && i === q.correctIndex) {
             style = "border-[var(--accent-green)] bg-[var(--accent-green)]/10";
           } else if (submitted && i === selected && i !== q.correctIndex) {

@@ -66,7 +66,7 @@ export default function ExportMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-48 bg-[var(--bg-secondary)] border border-white/[0.08] rounded-xl shadow-xl z-50">
+        <div className="absolute right-0 mt-2 w-48 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl shadow-xl z-50">
           <div className="py-1">
             <button onClick={() => handleExport("all", "both")} className="w-full text-left px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]">
               Export All (MD + Notebook)
@@ -82,7 +82,7 @@ export default function ExportMenu() {
       )}
 
       {status && (
-        <div className="absolute right-0 mt-2 w-64 px-3 py-2 bg-[var(--bg-secondary)] border border-white/[0.08] rounded-lg text-xs text-[var(--text-secondary)] z-50">
+        <div className="absolute right-0 mt-2 w-64 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-xs text-[var(--text-secondary)] z-50">
           {status}
         </div>
       )}

@@ -1,0 +1,286 @@
+---
+title: "Common Patterns & Recipes"
+quiz: []
+---
+
+## Overview
+
+Twelve copy-paste patterns for everyday Ray Data work. Each one is self-contained -- read the description, grab the code, and adapt it to your use case.
+
+---
+
+## 1. Basic ETL: CSV to Parquet
+
+**When to use:** You have raw CSV files and want a clean, typed Parquet output for downstream analytics or ML.
+
+<CodeBlock language="python" filename="etl_csv_to_parquet.py" code={`import ray
+ds = ray.data.read_csv("s3://bucket/raw/events/*.csv")
+ds = ds.filter(lambda row: row["status"] != "invalid")
+ds = ds.map(lambda row: {
+    **row,
+    "event_date": row["timestamp"][:10],
+    "amount": round(float(row["amount"]), 2),
+})
+ds.write_parquet("s3://bucket/cleaned/events/")
+`} />
+
+---
+
+## 2. Filter and Map with Error Handling
+
+**When to use:** Your data is messy and some rows will fail during transformation. Wrap your logic so bad rows are skipped instead of crashing the pipeline.
+
+<CodeBlock language="python" filename="safe_transform.py" code={`import ray
+import json
+ds = ray.data.read_text("logs/*.jsonl")
+def safe_parse(row):
+    try:
+        record = json.loads(row["text"])
+        return {"user_id": record["user_id"], "action": record["action"]}
+    except (json.JSONDecodeError, KeyError):
+        return None
+ds = ds.map(safe_parse)
+ds = ds.filter(lambda row: row is not None)
+`} />
+
+---
+
+## 3. Batch Inference with GPU
+
+**When to use:** You need to run a pretrained model over a large dataset. `ActorPoolStrategy` keeps the model loaded in GPU memory across batches, avoiding reload overhead.
+
+<CodeBlock language="python" filename="gpu_batch_inference.py" code={`import ray
+from ray.data import ActorPoolStrategy
+class ImageClassifier:
+    def __init__(self):
+        import torch
+        self.model = torch.hub.load("pytorch/vision", "resnet50", pretrained=True)
+        self.model.eval().cuda()
+    def __call__(self, batch: dict) -> dict:
+        import torch
+        images = torch.tensor(batch["image"]).cuda()
+        with torch.no_grad():
+            preds = self.model(images).argmax(dim=1).cpu().numpy()
+        return {"prediction": preds}
+ds = ray.data.read_binary_files("s3://bucket/images/", include_paths=True)
+ds = ds.map(preprocess_image)  # your preprocessing function
+ds = ds.map_batches(
+    ImageClassifier,
+    compute=ActorPoolStrategy(size=4),
+    num_gpus=1,
+    batch_size=32,
+)
+ds.write_parquet("s3://bucket/predictions/")
+`} />
+
+---
+
+## 4. Join Two Datasets with Zip
+
+**When to use:** You have two datasets with the same row count and ordering (e.g., features and labels) and want to combine them column-wise.
+
+<CodeBlock language="python" filename="zip_join.py" code={`import ray
+features = ray.data.read_parquet("features.parquet")
+labels = ray.data.read_parquet("labels.parquet")
+# Both must have the same number of rows and be aligned
+combined = features.zip(labels)
+combined.show(3)
+# {'feature_0': 0.52, 'feature_1': -1.3, 'label': 1}
+`} />
+
+If datasets are not aligned, sort or key-match them first:
+
+<CodeBlock language="python" filename="sorted_zip.py" code={`features = features.sort("id")
+labels = labels.sort("id")
+combined = features.zip(labels)
+`} />
+
+---
+
+## 5. GroupBy Aggregation
+
+**When to use:** Summarize data by category -- counts, sums, averages, or custom aggregations per group.
+
+<CodeBlock language="python" filename="groupby_agg.py" code={`import ray
+ds = ray.data.read_parquet("sales.parquet")
+# Built-in aggregations
+revenue_by_region = ds.groupby("region").sum("revenue")
+avg_order = ds.groupby("category").mean("order_value")
+# Custom aggregation: top 3 products per category
+def top_3(group):
+    return group.nlargest(3, "revenue")
+top_products = ds.groupby("category").map_groups(top_3, batch_format="pandas")
+top_products.show()
+`} />
+
+---
+
+## 6. Train/Test Split
+
+**When to use:** You need to split a dataset for ML training and evaluation. The split is random but reproducible with a seed.
+
+<CodeBlock language="python" filename="train_test_split.py" code={`import ray
+ds = ray.data.read_parquet("dataset.parquet")
+ds = ds.random_shuffle(seed=42)
+train_ds, test_ds = ds.train_test_split(test_size=0.2, seed=42)
+print(f"Train: {train_ds.count()}, Test: {test_ds.count()}")
+# Use with Ray Train
+for batch in train_ds.iter_torch_batches(batch_size=64):
+    train_step(batch)
+`} />
+
+---
+
+## 7. Reading Multiple Files with Glob Patterns
+
+**When to use:** Your data is partitioned across directories by date, region, or other keys. Use glob patterns to read a subset.
+
+<CodeBlock language="python" filename="glob_read.py" code={`import ray
+# All parquet files in a directory tree
+ds = ray.data.read_parquet("s3://bucket/data/**/*.parquet")
+# Specific date partitions
+ds = ray.data.read_parquet("data/year=2025/month=0[1-3]/*.parquet")
+# Multiple explicit paths
+ds = ray.data.read_parquet([
+    "s3://bucket/data/2025-01/",
+    "s3://bucket/data/2025-02/",
+    "s3://bucket/data/2025-03/",
+])
+`} />
+
+---
+
+## 8. Adding a Column from a Lookup Table
+
+**When to use:** You need to enrich rows by looking up values from a small reference table (e.g., mapping country codes to names).
+
+<CodeBlock language="python" filename="lookup_column.py" code={`import ray
+COUNTRY_NAMES = {
+    "US": "United States",
+    "GB": "United Kingdom",
+    "DE": "Germany",
+    "JP": "Japan",
+}
+ds = ray.data.read_parquet("users.parquet")
+ds = ds.add_column(
+    "country_name",
+    lambda row: COUNTRY_NAMES.get(row["country_code"], "Unknown"),
+)
+ds.show(3)
+`} />
+
+For larger lookup tables, use `map_batches` with Pandas for vectorized joins:
+
+<CodeBlock language="python" filename="lookup_merge.py" code={`import pandas as pd
+lookup_df = pd.read_csv("country_codes.csv")  # small file
+def enrich(batch: pd.DataFrame) -> pd.DataFrame:
+    return batch.merge(lookup_df, on="country_code", how="left")
+ds = ds.map_batches(enrich, batch_format="pandas")
+`} />
+
+---
+
+## 9. Deduplication by Key
+
+**When to use:** Your data has duplicate rows and you want to keep only the first (or last) occurrence per key.
+
+<CodeBlock language="python" filename="dedup.py" code={`import ray
+ds = ray.data.read_parquet("events.parquet")
+# Sort to control which duplicate is kept (e.g., latest timestamp first)
+ds = ds.sort("timestamp", descending=True)
+# Deduplicate using groupby: keep first row per user_id
+def keep_first(group: "pd.DataFrame") -> "pd.DataFrame":
+    return group.head(1)
+ds = ds.groupby("user_id").map_groups(keep_first, batch_format="pandas")
+`} />
+
+---
+
+## 10. Streaming Large Datasets with Backpressure
+
+**When to use:** Your data does not fit in memory. Ray Data streams by default, but you can tune block size and execution options for tighter memory control.
+
+<CodeBlock language="python" filename="streaming.py" code={`import ray
+from ray.data import DataContext
+ctx = DataContext.get_current()
+ctx.target_max_block_size = 64 * 1024 * 1024  # 64 MiB blocks
+ctx.execution_options.resource_limits.object_store_memory = 2e9  # 2 GB cap
+# This pipeline streams without loading the entire dataset
+ds = ray.data.read_parquet("s3://bucket/100tb-dataset/")
+ds = ds.map_batches(transform_fn, batch_size=4096)
+# Consume incrementally -- never materializes the full dataset
+for batch in ds.iter_batches(batch_size=1024):
+    send_to_database(batch)
+`} />
+
+---
+
+## 11. Converting Between Pandas, Arrow, and NumPy
+
+**When to use:** You need to move data between Ray Data and other libraries, or convert formats within a pipeline.
+
+<CodeBlock language="python" filename="format_conversion.py" code={`import ray
+import pandas as pd
+import numpy as np
+import pyarrow as pa
+# Into Ray Data
+ds = ray.data.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+ds = ray.data.from_numpy(np.array([[1, 2], [3, 4]]))
+ds = ray.data.from_arrow(pa.table({"col": [10, 20, 30]}))
+# Out of Ray Data
+df = ds.to_pandas()          # Pandas DataFrame
+table = ds.to_arrow()        # PyArrow Table
+# Within map_batches: batch_format controls what you receive
+ds.map_batches(fn, batch_format="pandas")   # fn gets pd.DataFrame
+ds.map_batches(fn, batch_format="numpy")    # fn gets dict[str, np.ndarray]
+`} />
+
+---
+
+## 12. Parallel Download and Processing Pipeline
+
+**When to use:** You need to download files from URLs and process them in parallel. Use `map_batches` with concurrency to control parallelism.
+
+<CodeBlock language="python" filename="download_pipeline.py" code={`import ray
+import requests
+def download_and_extract(batch):
+    results = {"url": [], "title": [], "length": []}
+    for url in batch["url"]:
+        try:
+            resp = requests.get(url, timeout=10)
+            results["url"].append(url)
+            results["title"].append(resp.text[:100])
+            results["length"].append(len(resp.text))
+        except Exception:
+            results["url"].append(url)
+            results["title"].append("")
+            results["length"].append(0)
+    return results
+urls = ray.data.from_items([{"url": u} for u in url_list])
+ds = urls.map_batches(
+    download_and_extract,
+    batch_size=16,
+    concurrency=8,
+    batch_format="numpy",
+)
+ds.write_parquet("downloaded_pages/")
+`} />
+
+---
+
+## Quick Pattern Index
+
+| # | Pattern | Key API |
+|---|---------|---------|
+| 1 | CSV to Parquet ETL | `read_csv` + `write_parquet` |
+| 2 | Safe transform | `map` + `filter` with try/except |
+| 3 | GPU batch inference | `map_batches` + `ActorPoolStrategy` |
+| 4 | Column-wise join | `zip` |
+| 5 | GroupBy aggregation | `groupby().sum()` / `map_groups` |
+| 6 | Train/test split | `train_test_split` |
+| 7 | Glob multi-file read | `read_parquet("**/*.parquet")` |
+| 8 | Lookup table enrichment | `add_column` or `map_batches` merge |
+| 9 | Deduplication | `sort` + `groupby().map_groups` |
+| 10 | Streaming with backpressure | `DataContext` + `iter_batches` |
+| 11 | Format conversion | `from_pandas` / `to_pandas` / `to_arrow` |
+| 12 | Parallel download | `map_batches` with `concurrency` |

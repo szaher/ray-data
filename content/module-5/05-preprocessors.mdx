@@ -1,0 +1,111 @@
+---
+title: "Data Preprocessors for ML"
+quiz:
+  - question: "What is the benefit of using Chain to combine multiple preprocessors?"
+    options:
+      - "It runs all preprocessors in parallel"
+      - "It applies preprocessors in sequence as a single reusable pipeline"
+      - "It automatically selects the best preprocessor"
+      - "It reduces the number of features"
+    correctIndex: 1
+    explanation: "Chain composes multiple preprocessors into a single pipeline that applies them in order. This makes the full preprocessing sequence reusable and portable between training and inference."
+  - question: "When should you use BatchMapper instead of a built-in preprocessor like StandardScaler?"
+    options:
+      - "When you want worse performance"
+      - "When you need custom transformations not covered by built-in preprocessors"
+      - "When working with small datasets"
+      - "When you only have one column"
+    correctIndex: 1
+    explanation: "BatchMapper lets you write arbitrary batch transformation functions. Use it for custom logic like text tokenization, image augmentation, or domain-specific feature engineering that built-in preprocessors don't cover."
+---
+
+## Why Preprocessors?
+
+ML pipelines need consistent data transformations at training and inference time. Ray Data preprocessors encapsulate transformations as **portable, composable objects** that you can fit on training data and apply identically during serving.
+
+<MermaidDiagram chart={`graph LR
+    RAW[Raw Data] --> P1["StandardScaler\n(normalize)"]
+    P1 --> P2["OneHotEncoder\n(categoricals)"]
+    P2 --> P3["BatchMapper\n(custom features)"]
+    P3 --> READY["ML-Ready\nDataset"]
+    style RAW fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style P1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style READY fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Built-in Preprocessors
+
+Ray Data provides common ML preprocessors out of the box. They follow a **fit/transform** pattern -- learn statistics from training data, then apply them consistently.
+
+<CodeBlock language="python" code={`from ray.data.preprocessors import StandardScaler, MinMaxScaler, OrdinalEncoder
+
+# StandardScaler: zero mean, unit variance
+scaler = StandardScaler(columns=["age", "income", "score"])
+
+# MinMaxScaler: scale to [0, 1] range
+minmax = MinMaxScaler(columns=["price", "quantity"])
+
+# OrdinalEncoder: convert categories to integers
+encoder = OrdinalEncoder(columns=["city", "product_type"])
+
+# Fit on training data, then transform
+ds = ray.data.read_parquet("s3://bucket/train/")
+scaler.fit(ds)
+transformed = scaler.transform(ds)`} />
+
+## Custom Transforms with BatchMapper
+
+When built-in preprocessors aren't enough, `BatchMapper` lets you write arbitrary transformation functions that operate on batches.
+
+<CodeBlock language="python" code={`from ray.data.preprocessors import BatchMapper
+import numpy as np
+
+# Custom feature engineering
+def add_features(batch: dict) -> dict:
+    batch["price_per_sqft"] = batch["price"] / batch["sqft"]
+    batch["log_income"] = np.log1p(batch["income"])
+    batch["age_bucket"] = (batch["age"] // 10) * 10  # decade buckets
+    return batch
+
+feature_eng = BatchMapper(add_features, batch_format="numpy")`} />
+
+## Composing with Chain
+
+`Chain` combines multiple preprocessors into a single pipeline. The order matters -- each preprocessor's output feeds into the next.
+
+<CodeBlock language="python" code={`from ray.data.preprocessors import Chain, StandardScaler, OrdinalEncoder
+
+# Build a reusable preprocessing pipeline
+preprocessor = Chain(
+    OrdinalEncoder(columns=["city", "category"]),
+    BatchMapper(add_features, batch_format="numpy"),
+    StandardScaler(columns=["price_per_sqft", "log_income", "score"]),
+)
+
+# Fit the entire chain on training data
+train_ds = ray.data.read_parquet("s3://bucket/train/")
+preprocessor.fit(train_ds)
+train_processed = preprocessor.transform(train_ds)
+
+# Apply the same chain at inference time -- guarantees consistency
+test_ds = ray.data.read_parquet("s3://bucket/test/")
+test_processed = preprocessor.transform(test_ds)`} />
+
+## Preprocessors with Ray Train
+
+Pass the preprocessor directly to the Trainer -- it is applied automatically and saved with checkpoints.
+
+<CodeBlock language="python" code={`from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
+
+trainer = TorchTrainer(
+    train_loop_per_worker=train_fn,
+    datasets={"train": train_ds, "val": val_ds},
+    preprocessor=preprocessor,  # applied before data reaches workers
+    scaling_config=ScalingConfig(num_workers=4, use_gpu=True),
+)
+result = trainer.fit()`} />
+
+**Key takeaway:** Define your preprocessing pipeline once with `Chain`, fit it on training data, and reuse the same fitted pipeline everywhere -- training, evaluation, and serving.

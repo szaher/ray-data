@@ -1,0 +1,125 @@
+---
+title: "Fault Tolerance & Lineage"
+quiz:
+  - question: "How does Ray Data recover from a worker failure during a map_batches operation?"
+    options:
+      - "It restarts the entire job from scratch"
+      - "It retries only the failed tasks by re-reading or recomputing the input blocks using lineage"
+      - "It loads the result from a checkpoint file"
+      - "It skips the failed blocks and continues"
+    correctIndex: 1
+    explanation: "Ray Data tracks the lineage of each block — which input blocks and operators produced it. When a task fails, Ray retries just that task by recomputing or re-reading its input blocks, not the entire pipeline."
+  - question: "What is the purpose of calling ds.materialize() for fault tolerance?"
+    options:
+      - "It converts the dataset to a pandas DataFrame"
+      - "It pins computed blocks in the object store, creating a checkpoint that truncates the lineage"
+      - "It saves the dataset to disk automatically"
+      - "It disables lazy execution permanently"
+    correctIndex: 1
+    explanation: "materialize() forces full computation and pins blocks in the object store. This acts as a checkpoint — if downstream stages fail, they only need to recompute from the materialized point rather than all the way back to the original source."
+---
+
+## Failures Are Inevitable at Scale
+
+When processing terabytes across dozens of machines, node failures, preemptions, and OOM kills are normal. Ray Data is designed to recover transparently using **task-level retries** and **lineage-based reconstruction**.
+
+<MermaidDiagram chart={`graph TD
+    R["Read Block A"] --> M1["Map Task 1"]
+    R2["Read Block B"] --> M2["Map Task 2"]
+    R3["Read Block C"] --> M3["Map Task 3 ✗"]
+    M1 --> W["Write"]
+    M2 --> W
+    M3 -->|"FAIL"| RETRY["Retry: re-read Block C\nthen re-run Map Task 3"]
+    RETRY --> W
+    style M3 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style RETRY fill:#68d391,stroke:#68d391,color:#1a1d27
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style R2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style R3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Block-Level Retries
+
+Ray Data retries at the **task level**, not the job level. Each task processes one or more blocks. When a task fails (worker crash, OOM, application error), the executor retries just that task on a different worker.
+
+<CodeBlock language="python" code={`import ray
+
+ctx = ray.data.DataContext.get_current()
+
+# Configure max retries per task (default is 3)
+ctx.max_task_retries = 5
+
+# Application-level exceptions can also trigger retries
+ds = ray.data.read_parquet("s3://bucket/data/").map_batches(
+    flaky_transform,
+    batch_size=1024,
+    # Ray retries this task up to max_task_retries times
+    # if the worker crashes or raises an exception
+)`} />
+
+## Lineage Reconstruction
+
+When a worker holding computed blocks dies, those blocks are lost from the object store. Ray Data reconstructs them using **lineage** — the recorded chain of operations and inputs that produced each block.
+
+<MermaidDiagram chart={`graph LR
+    SRC["Source File\n(durable)"] -->|"lineage"| B1["Block v1\n(lost)"]
+    B1 -->|"lineage"| B2["Block v2\n(lost)"]
+    SRC -->|"reconstruct"| B1R["Block v1\n(recomputed)"]
+    B1R -->|"reconstruct"| B2R["Block v2\n(recomputed)"]
+    style B1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style B2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style B1R fill:#68d391,stroke:#68d391,color:#1a1d27
+    style B2R fill:#68d391,stroke:#68d391,color:#1a1d27
+    style SRC fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Checkpointing with materialize()
+
+Long pipelines can have deep lineage chains. If a block near the end is lost, recomputation might cascade all the way back to the source. Use `materialize()` to create checkpoints that truncate lineage.
+
+<CodeBlock language="python" code={`import ray
+
+# Without checkpointing: failure at stage 3 recomputes from stage 1
+ds = (
+    ray.data.read_parquet("s3://bucket/raw/")
+    .map_batches(expensive_parse)
+    .map_batches(expensive_transform)    # if this fails...
+    .map_batches(expensive_inference)    # ...recompute from read
+)
+
+# With checkpointing: failure at stage 3 only recomputes from checkpoint
+ds = ray.data.read_parquet("s3://bucket/raw/")
+ds = ds.map_batches(expensive_parse).materialize()    # checkpoint!
+ds = ds.map_batches(expensive_transform).materialize() # checkpoint!
+ds = ds.map_batches(expensive_inference)  # failure only re-runs this`} />
+
+## Configuring Fault Tolerance
+
+<CodeBlock language="python" code={`import ray
+
+ctx = ray.data.DataContext.get_current()
+
+# Number of times to retry failed tasks
+ctx.max_task_retries = 3
+
+# For spot instances: enable Ray's built-in node fault tolerance
+ray.init(
+    runtime_env={"env_vars": {"RAY_BACKEND_LOG_LEVEL": "info"}},
+)
+
+# Write intermediate results to durable storage for long jobs
+ds = ray.data.read_parquet("s3://input/")
+ds = ds.map_batches(stage_1)
+ds.write_parquet("s3://checkpoint/stage1/")  # durable checkpoint
+
+# Resume from durable checkpoint if the job restarts
+ds = ray.data.read_parquet("s3://checkpoint/stage1/")
+ds = ds.map_batches(stage_2)
+ds.write_parquet("s3://output/")`} />
+
+## Best Practices
+
+- **Keep transforms idempotent** — retries re-execute your function, so avoid side effects that can't be repeated safely.
+- **Checkpoint before expensive stages** — use `materialize()` or write to durable storage to limit recomputation.
+- **Use durable sources** — lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
+- **Monitor retries** — excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.

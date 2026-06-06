@@ -1,0 +1,105 @@
+---
+title: "Memory Management"
+quiz:
+  - question: "What happens when Ray Data runs out of object store memory during execution?"
+    options:
+      - "The entire job crashes immediately"
+      - "It pauses all tasks and waits forever"
+      - "Objects are spilled to disk, and backpressure slows producers to let consumers catch up"
+      - "It silently drops data blocks"
+    correctIndex: 2
+    explanation: "Ray's object store supports spilling objects to disk when memory is full. Additionally, Ray Data's streaming executor applies backpressure to slow down producers, preventing unbounded memory growth."
+  - question: "Which setting controls the target maximum block size in Ray Data?"
+    options:
+      - "ctx.execution_options.max_workers"
+      - "ctx.target_max_block_size"
+      - "ctx.execution_options.object_store_limit"
+      - "ray.data.set_block_size()"
+    correctIndex: 1
+    explanation: "ctx.target_max_block_size (on DataContext) controls the target upper bound for block sizes. Ray Data uses this to decide when to split blocks during reads and shuffles."
+---
+
+## How Ray Data Uses Memory
+
+Ray Data stores intermediate data as **blocks** in the Ray object store — a shared-memory plasma store on each node. The streaming executor processes data stage-by-stage, but producers can outrun consumers, causing memory to grow. Understanding this pipeline is key to tuning large-scale jobs.
+
+<MermaidDiagram chart={`graph LR
+    R["Read\n(Producer)"] -->|blocks| OS["Object Store\n(Shared Memory)"]
+    OS -->|blocks| M["Map\n(Consumer)"]
+    M -->|blocks| OS2["Object Store"]
+    OS2 -->|blocks| W["Write\n(Consumer)"]
+    BP["Backpressure"] -.->|"slow down"| R
+    SPILL["Disk Spill"] -.->|"overflow"| OS
+    style OS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style OS2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style SPILL fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style BP fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style R fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Object Spilling
+
+When the object store fills up, Ray **spills** objects to local disk (or configured external storage). Spilling keeps jobs alive but dramatically slows them down due to disk I/O. The goal is to avoid spilling through proper tuning.
+
+<CodeBlock language="python" code={`import ray
+
+# Configure spill directory and storage at Ray init
+ray.init(
+    _system_config={
+        "object_spilling_config": '{"type": "filesystem", "params": {"directory_path": "/mnt/ssd/spill"}}'
+    }
+)
+
+# Check if spilling is occurring during a job
+ds = ray.data.read_parquet("s3://bucket/large-dataset/")
+ds = ds.map_batches(heavy_transform, batch_size=4096)
+stats = ds.materialize().stats()
+print(stats)  # Shows spill bytes if it occurred`} />
+
+## Tuning Block Size and Memory Limits
+
+The two primary knobs for memory management are **block size** and **object store memory limits**.
+
+<CodeBlock language="python" code={`import ray
+
+ctx = ray.data.DataContext.get_current()
+
+# Target max block size (default ~128 MiB).
+# Smaller blocks = lower peak memory, more scheduling overhead.
+# Larger blocks = fewer tasks, higher peak memory per task.
+ctx.target_max_block_size = 64 * 1024 * 1024  # 64 MiB
+
+# Limit how much object store memory the Dataset executor can use.
+# This triggers backpressure before hitting the global object store limit.
+ctx.execution_options.resource_limits.object_store_memory = 4e9  # 4 GiB`} />
+
+## Memory-Aware Scheduling and Backpressure
+
+Ray Data's streaming executor applies **backpressure** automatically: when downstream operators are slow or memory is filling up, the executor pauses upstream producers. You can tune this behavior.
+
+<CodeBlock language="python" code={`ctx = ray.data.DataContext.get_current()
+
+# Control the concurrency of each operator to limit memory
+ds = ray.data.read_parquet("s3://bucket/huge/").map_batches(
+    heavy_model_inference,
+    batch_size=1024,
+    num_gpus=1,
+    concurrency=2,  # At most 2 workers running this op at once
+)
+
+# Preserve output ordering (costs more memory due to buffering)
+ctx.execution_options.preserve_order = True
+
+# For debugging: materialize intermediate results to inspect memory
+ds_read = ray.data.read_parquet("data/").materialize()
+print(f"Read stage: {ds_read.stats()}")
+ds_mapped = ds_read.map_batches(transform).materialize()
+print(f"Map stage: {ds_mapped.stats()}")`} />
+
+## Practical Guidelines
+
+- **Start with defaults** — Ray Data's backpressure handles most workloads out of the box.
+- **If you see spilling** — reduce `target_max_block_size`, lower `concurrency`, or add more nodes.
+- **For GPU inference** — set `concurrency` to match GPU count so you don't over-allocate object store memory with queued batches.
+- **Monitor with `ds.stats()`** — it reports bytes spilled, peak object store usage, and per-operator memory.

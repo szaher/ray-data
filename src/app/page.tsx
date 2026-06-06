@@ -16,7 +16,7 @@ export default async function HomePage() {
           <a
             key={mod.id}
             href={`/lesson/${mod.id}/${mod.lessons[0].slug}`}
-            className="block p-5 rounded-xl bg-[var(--bg-secondary)] border border-white/[0.08] hover:border-white/[0.16] transition-colors"
+            className="block p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-colors"
           >
             <div className="flex items-center gap-2 mb-2">
               <span

@@ -1,28 +1,41 @@
 "use client";
 
-import Editor from "@monaco-editor/react";
-import { useState } from "react";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
+
+const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 interface CodeBlockProps {
-  code: string;
+  code?: string;
   language?: string;
   filename?: string;
+  children?: React.ReactNode;
 }
 
-export default function CodeBlock({ code, language = "python", filename }: CodeBlockProps) {
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    return extractText((node as any).props.children);
+  }
+  return "";
+}
+
+export default function CodeBlock({ code, language = "python", filename, children }: CodeBlockProps) {
+  const codeText = code || extractText(children) || "";
   const [copied, setCopied] = useState(false);
-  const lineCount = code.split("\n").length;
+  const lineCount = codeText.split("\n").length;
   const height = Math.min(Math.max(lineCount * 20 + 20, 80), 500);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
+    await navigator.clipboard.writeText(codeText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="my-4 rounded-xl border border-white/[0.08] overflow-hidden bg-[var(--bg-tertiary)]">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.08]">
+    <div className="my-4 rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-tertiary)]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)]">
         <span className="text-xs text-[var(--text-secondary)]">
           {filename || language}
         </span>
@@ -36,7 +49,7 @@ export default function CodeBlock({ code, language = "python", filename }: CodeB
       <Editor
         height={height}
         language={language}
-        value={code}
+        value={codeText}
         theme="vs-dark"
         options={{
           readOnly: true,

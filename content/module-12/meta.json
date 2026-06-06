@@ -1,0 +1,56 @@
+{
+  "id": 12,
+  "title": "Future & Emerging Patterns",
+  "description": "Forward-looking: lineage, streaming, feature stores, multi-modal",
+  "color": "#4fd1c5",
+  "lessons": [
+    {
+      "slug": "01-data-lineage",
+      "title": "Data Lineage & Observability",
+      "description": "End-to-end transformation tracking",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "lineage",
+        "dashboard"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-streaming-pipelines",
+      "title": "Streaming Data Pipelines",
+      "description": "Continuous ingestion, Ray Data Gen, backpressure",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "streaming",
+        "comparison"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-feature-stores",
+      "title": "Ray Data + Feature Stores",
+      "description": "Feast/Tecton integration, online vs offline",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "architecture",
+        "integration"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-multi-modal",
+      "title": "Multi-Modal Data Pipelines",
+      "description": "Unified text/image/audio/video processing",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "pipeline",
+        "routing"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    }
+  ]
+}

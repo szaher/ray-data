@@ -1,0 +1,128 @@
+---
+title: "Data Lineage & Observability"
+quiz:
+  - question: "What does the Ray Dashboard's Dataset tab show you?"
+    options:
+      - "Only the final output size"
+      - "Per-operator execution metrics like throughput, memory, and block counts"
+      - "The Python source code of your transforms"
+      - "Only error messages"
+    correctIndex: 1
+    explanation: "The Dataset tab in the Ray Dashboard provides per-operator execution metrics including throughput, rows processed, memory usage, and block counts — giving full visibility into your pipeline."
+  - question: "Why is data lineage important for production pipelines?"
+    options:
+      - "It makes pipelines run faster"
+      - "It reduces memory usage"
+      - "It lets you trace how each output was produced and debug failures back to their source"
+      - "It is required by the Ray runtime"
+    correctIndex: 2
+    explanation: "Data lineage tracks the full transformation history of your data, so when something goes wrong you can trace the issue back to the exact operator, input block, or configuration that caused it."
+---
+
+## Why Observability Matters
+
+When a pipeline processes millions of rows across dozens of workers, you need answers to: Where is the bottleneck? Which operator is slow? How much memory is each stage using? Ray Data provides built-in observability to answer these questions.
+
+<MermaidDiagram chart={`graph LR
+    subgraph Pipeline Execution
+        R[Read\nCSV Source] --> T1[Map\nParse Fields]
+        T1 --> T2[Map Batches\nML Inference]
+        T2 --> W[Write\nParquet Sink]
+    end
+    subgraph Observability Layer
+        D[Ray Dashboard]
+        S[Dataset Stats]
+        L[Execution Logs]
+    end
+    T1 -.->|metrics| D
+    T2 -.->|metrics| D
+    R -.->|block counts| S
+    W -.->|throughput| L
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style T2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style W fill:#68d391,stroke:#68d391,color:#1a1d27
+    style D fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style S fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style L fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Dataset Stats API
+
+After executing a pipeline, Ray Data exposes detailed statistics for every operator. This is your first tool for debugging performance issues.
+
+<CodeBlock language="python" code={`import ray
+
+ds = ray.data.read_parquet("s3://my-bucket/events/")
+
+ds = ds.map_batches(parse_events, batch_size=1024)
+ds = ds.filter(lambda row: row["status"] == "active")
+ds = ds.map_batches(enrich_features, batch_size=512)
+
+# Materialize and inspect stats
+ds = ds.materialize()
+print(ds.stats())
+# Dataset Stats:
+#   Operator 1 ReadParquet: 200 blocks executed in 4.2s
+#     * Output: 200 blocks, 50.0GB
+#   Operator 2 MapBatches(parse_events): 200 blocks in 8.1s
+#     * Throughput: 24.7 blocks/s
+#   Operator 3 Filter: 200 blocks in 1.3s
+#     * Rows filtered: 1,200,000 / 5,000,000
+#   Operator 4 MapBatches(enrich_features): 200 blocks in 12.5s
+#     * Throughput: 16.0 blocks/s`} />
+
+## The Ray Dashboard
+
+The Ray Dashboard provides a live, visual view of your pipeline. Navigate to the **Datasets** tab to see:
+
+- **Operator progress** -- how many blocks each operator has processed
+- **Throughput** -- rows/sec and bytes/sec per operator
+- **Memory usage** -- object store memory consumed by each stage
+- **Backpressure indicators** -- which operators are waiting on downstream capacity
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Ray Dashboard - Dataset View"
+        OP1["ReadParquet\n200/200 blocks | 4.2s\nMemory: 2.1 GB"]
+        OP2["MapBatches: parse\n200/200 blocks | 8.1s\nThroughput: 24.7 blk/s"]
+        OP3["Filter\n200/200 blocks | 1.3s\nFiltered: 76% rows"]
+        OP4["MapBatches: enrich\n142/200 blocks | ...\nThroughput: 16.0 blk/s"]
+    end
+    OP1 --> OP2 --> OP3 --> OP4
+    style OP1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OP2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OP3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OP4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Debugging with Lineage
+
+When an output looks wrong, lineage helps you trace back to the cause. Combine `stats()` with logging inside your UDFs to build a full picture.
+
+<CodeBlock language="python" code={`import logging
+
+logger = logging.getLogger("ray.data")
+logger.setLevel(logging.DEBUG)
+
+def parse_events(batch):
+    # Log batch-level diagnostics for traceability
+    logger.debug(
+        f"parse_events: batch_size={len(batch['raw'])}, "
+        f"null_count={batch['raw'].isna().sum()}"
+    )
+    batch["parsed"] = batch["raw"].apply(json.loads)
+    return batch
+
+ds = ray.data.read_parquet("s3://my-bucket/events/")
+ds = ds.map_batches(parse_events, batch_size=1024)
+ds.materialize()
+
+# Check execution stats for anomalies
+stats = ds.stats()
+print(stats)  # Look for skewed block sizes or slow operators`} />
+
+## Key Takeaways
+
+- **`ds.stats()`** gives you per-operator metrics after materialization
+- The **Ray Dashboard Datasets tab** shows live progress, throughput, and memory
+- Add **structured logging** inside UDFs to trace data quality issues
+- Lineage is about connecting outputs back to inputs -- essential for debugging production pipelines

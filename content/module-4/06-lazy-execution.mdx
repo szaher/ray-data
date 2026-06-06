@@ -1,0 +1,116 @@
+---
+title: "Lazy Execution & Materialization"
+quiz:
+  - question: "When does Ray Data actually execute transformations?"
+    options:
+      - "Immediately when you call map_batches() or filter()"
+      - "Only when you consume results — via iter_batches(), show(), write_parquet(), etc."
+      - "After a 5-second delay"
+      - "When you call ray.init()"
+    correctIndex: 1
+    explanation: "Ray Data uses lazy execution. Calling map_batches() or filter() just builds a logical plan. Actual computation happens only when you consume the data — by iterating, writing, calling show(), take(), or count()."
+  - question: "What does ds.materialize() do?"
+    options:
+      - "Saves the Dataset to disk as Parquet"
+      - "Forces execution of the pipeline and pins all computed blocks in Ray's object store"
+      - "Converts the Dataset from Arrow to pandas format"
+      - "Deletes intermediate results to free memory"
+    correctIndex: 1
+    explanation: "materialize() forces the full pipeline to execute and keeps the resulting blocks in Ray's object store (memory). This is useful when you plan to iterate over the same Dataset multiple times and want to avoid re-computation."
+---
+
+## Lazy by Default
+
+When you chain transformations in Ray Data, **nothing executes**. Each call to `map_batches`, `filter`, or `map` adds a step to a logical plan. Execution is deferred until you consume the results.
+
+<MermaidDiagram chart={`graph LR
+    R["read_parquet()"] -->|lazy| M["map_batches()"]
+    M -->|lazy| F["filter()"]
+    F -->|lazy| A["add_column()"]
+    A -->|"TRIGGERS execution"| C["show() / iter_batches()\nwrite_parquet() / count()"]
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style M fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style F fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style C fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Why Lazy Execution?
+
+Lazy execution enables two important optimizations:
+
+1. **Operator fusion** -- Ray Data can merge adjacent map steps into a single pass over the data, reducing serialization overhead.
+2. **Streaming execution** -- data flows through the pipeline block-by-block instead of materializing every intermediate result in memory.
+
+<CodeBlock language="python" code={`import ray
+
+# None of these lines trigger computation
+ds = ray.data.read_parquet("s3://bucket/events/")      # plan: read
+ds = ds.map_batches(parse_json_fields)                  # plan: read -> map
+ds = ds.filter(lambda row: row["status"] == "active")   # plan: read -> map -> filter
+ds = ds.map_batches(extract_features)                   # plan: read -> map -> filter -> map
+
+# Nothing has run yet. ds is just a plan.
+print(ds)
+# Dataset(
+#   num_rows=?,
+#   schema={...}
+# )
+
+# THIS triggers execution:
+ds.show(5)`} />
+
+## What Triggers Execution?
+
+These operations cause the pipeline to run:
+
+| Operation | What It Does |
+|-----------|-------------|
+| `show(n)` | Prints first n rows |
+| `take(n)` | Returns first n rows as list |
+| `count()` | Returns total row count |
+| `iter_rows()` | Streams rows one at a time |
+| `iter_batches()` | Streams batches |
+| `write_parquet()` | Writes results to files |
+| `write_csv()` | Writes results to CSV |
+| `materialize()` | Forces full execution, pins in memory |
+
+## materialize() — Pinning Results
+
+By default, once data flows through a consumer, the intermediate blocks are freed. If you need to iterate over the same dataset multiple times (e.g., multiple training epochs), use `materialize()` to keep results in memory.
+
+<CodeBlock language="python" code={`# Without materialize — re-reads and re-computes every epoch
+ds = ray.data.read_parquet("s3://bucket/train/")
+ds = ds.map_batches(preprocess)
+
+for epoch in range(5):
+    for batch in ds.iter_batches(batch_size=128):  # re-executes pipeline each time
+        train(batch)
+
+# With materialize — compute once, iterate many times
+ds = ray.data.read_parquet("s3://bucket/train/")
+ds = ds.map_batches(preprocess)
+ds = ds.materialize()  # executes pipeline, pins blocks in object store
+
+for epoch in range(5):
+    for batch in ds.iter_batches(batch_size=128):  # reads from memory
+        train(batch)`} />
+
+## When to Materialize
+
+- **Materialize** when you will consume the same dataset multiple times (multi-epoch training, multiple aggregations).
+- **Do not materialize** when data is consumed once (single-pass inference, write-and-forget ETL). Streaming execution is more memory-efficient.
+
+<CodeBlock language="python" code={`# Good use of materialize: multi-epoch training
+train_ds = ray.data.read_parquet("train/").map_batches(prep).materialize()
+val_ds = ray.data.read_parquet("val/").map_batches(prep).materialize()
+
+for epoch in range(10):
+    train_loss = train_epoch(train_ds)
+    val_loss = eval_epoch(val_ds)
+    print(f"Epoch {epoch}: train={train_loss:.3f} val={val_loss:.3f}")
+
+# Good use of streaming: one-shot batch inference
+ds = ray.data.read_images("s3://bucket/images/")
+ds = ds.map_batches(Predictor, num_gpus=1, concurrency=2)
+ds.write_parquet("s3://bucket/predictions/")  # stream through, no materialize needed`} />

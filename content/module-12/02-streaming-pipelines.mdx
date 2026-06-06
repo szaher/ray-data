@@ -1,0 +1,134 @@
+---
+title: "Streaming Data Pipelines"
+quiz:
+  - question: "What is the main advantage of Ray Data's streaming execution model?"
+    options:
+      - "It requires less code to write"
+      - "It processes data block-by-block so the full dataset never needs to fit in memory"
+      - "It only works with Kafka"
+      - "It automatically fixes data quality issues"
+    correctIndex: 1
+    explanation: "Streaming execution processes data block-by-block through the pipeline. Each block flows through all operators before the next block starts, so you never need to hold the entire dataset in memory at once."
+  - question: "How does backpressure work in a Ray Data streaming pipeline?"
+    options:
+      - "It speeds up slow operators automatically"
+      - "It duplicates data to handle load"
+      - "It slows down upstream operators when downstream operators cannot keep up, preventing out-of-memory errors"
+      - "It drops data that cannot be processed in time"
+    correctIndex: 2
+    explanation: "Backpressure is Ray Data's flow control mechanism. When a downstream operator's output queue is full, upstream operators pause, preventing the system from producing data faster than it can be consumed."
+---
+
+## From Batch to Streaming
+
+Traditional batch pipelines read all data, process it, then write results. Streaming pipelines process data continuously as it arrives -- block by block. Ray Data uses streaming execution by default, and this pattern extends naturally to real-time workloads.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Batch: Load Everything First"
+        B1[Read ALL\n10GB] --> B2[Process ALL\n10GB] --> B3[Write ALL\n10GB]
+    end
+    subgraph "Streaming: Block-by-Block"
+        S1[Read Block 1\n100MB] --> S2[Process\nBlock 1] --> S3[Write\nBlock 1]
+        S4[Read Block 2\n100MB] --> S5[Process\nBlock 2] --> S6[Write\nBlock 2]
+        S7["... more blocks ..."]
+    end
+    style B1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style B2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style S1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style S2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style S3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style S4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S5 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S6 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Streaming Execution in Ray Data
+
+Ray Data's `iter_batches()` and `iter_torch_batches()` enable streaming consumption. The pipeline produces blocks on-demand as the consumer pulls them.
+
+<CodeBlock language="python" code={`import ray
+
+# Streaming read + process: only a few blocks in memory at a time
+ds = ray.data.read_parquet("s3://my-bucket/events/", parallelism=200)
+ds = ds.map_batches(transform_events, batch_size=2048)
+
+# Stream results to a consumer — blocks flow through lazily
+for batch in ds.iter_batches(batch_size=4096):
+    send_to_downstream(batch)
+
+# For ML training: stream directly to PyTorch
+train_ds = ray.data.read_parquet("s3://data/train/")
+train_ds = train_ds.map_batches(preprocess, batch_size=1024)
+
+for epoch in range(10):
+    for batch in train_ds.iter_torch_batches(batch_size=256):
+        loss = model.train_step(batch)  # Blocks stream in as needed`} />
+
+## Continuous Ingestion Pattern
+
+For near-real-time workloads, you can build a loop that continuously reads new data partitions and processes them through your pipeline.
+
+<CodeBlock language="python" code={`import ray
+import time
+from datetime import datetime, timedelta
+
+def process_latest_partition():
+    """Process the latest hourly partition as it lands."""
+    current_hour = datetime.utcnow().replace(minute=0, second=0)
+    partition_path = current_hour.strftime(
+        "s3://my-bucket/events/dt=%Y-%m-%d/hr=%H/"
+    )
+
+    ds = ray.data.read_parquet(partition_path)
+    ds = ds.map_batches(parse_and_validate, batch_size=2048)
+    ds = ds.filter(lambda row: row["is_valid"])
+    ds = ds.map_batches(compute_features, batch_size=1024)
+    ds.write_parquet(
+        current_hour.strftime(
+            "s3://my-bucket/features/dt=%Y-%m-%d/hr=%H/"
+        )
+    )
+    return ds.count()
+
+# Continuous ingestion loop
+while True:
+    rows = process_latest_partition()
+    print(f"Processed {rows} rows")
+    time.sleep(3600)  # Wait for next hourly partition`} />
+
+## Backpressure and Flow Control
+
+Ray Data automatically applies backpressure when downstream operators are slower than upstream ones. This prevents out-of-memory errors without any configuration.
+
+<MermaidDiagram chart={`graph LR
+    R[Read\n50 blk/s] -->|queue full| M[Map\n30 blk/s] -->|flowing| W[Write\n40 blk/s]
+    R -.- BP["Backpressure:\nRead slows to\n30 blk/s"]
+    style R fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style M fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style W fill:#68d391,stroke:#68d391,color:#1a1d27
+    style BP fill:#242734,stroke:#e0e0e0,color:#e0e0e0
+`} />
+
+<CodeBlock language="python" code={`import ray
+
+# Ray Data handles backpressure automatically.
+# Tune the object store memory budget to control how much data
+# is buffered between operators.
+ctx = ray.data.DataContext.get_current()
+ctx.target_max_block_size = 128 * 1024 * 1024  # 128MB per block
+
+ds = ray.data.read_images("s3://my-bucket/images/", size=(512, 512))
+ds = ds.map_batches(
+    run_inference,  # Slow GPU operator
+    batch_size=32,
+    num_gpus=1,
+    concurrency=4,
+)
+ds.write_parquet("s3://my-bucket/predictions/")`} />
+
+## Key Takeaways
+
+- Ray Data uses **streaming execution by default** -- data flows block-by-block through operators
+- Use **`iter_batches()`** to consume results lazily without loading the full dataset
+- Build **continuous ingestion loops** for near-real-time partition processing
+- **Backpressure** is automatic: slow operators cause upstream operators to pause, keeping memory bounded

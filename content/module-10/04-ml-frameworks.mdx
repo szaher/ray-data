@@ -1,0 +1,337 @@
+---
+title: "ML Frameworks: PyTorch, TF & HuggingFace"
+quiz:
+  - question: "What is the key advantage of using ds.iter_torch_batches() over a standard PyTorch DataLoader?"
+    options:
+      - "It automatically tunes the learning rate"
+      - "It streams data from a distributed Ray Dataset, avoiding the need to load the entire dataset into each worker's memory"
+      - "It provides built-in data augmentation"
+      - "It compiles the model to TorchScript for faster inference"
+    correctIndex: 1
+    explanation: "iter_torch_batches() streams batches from Ray's distributed object store on demand. Unlike a standard DataLoader that requires the full dataset in local memory (or on local disk), Ray Data can stream from cloud storage, databases, or other distributed sources, keeping memory usage constant regardless of dataset size."
+  - question: "When using map_batches() with ActorPoolStrategy for batch inference, why is a class-based callable preferred over a plain function?"
+    options:
+      - "Functions cannot return dictionaries"
+      - "The class __init__ loads the model once per actor, amortizing the cost across all batches instead of reloading per batch"
+      - "Only classes can use GPUs in Ray"
+      - "Plain functions are not serializable in Ray"
+    correctIndex: 1
+    explanation: "A class-based callable (with __init__ and __call__) lets Ray load the model once when the actor starts. The model stays in memory and is reused for every batch the actor processes. With a plain function, the model would need to be loaded on every single batch, which is prohibitively expensive for large models."
+---
+
+## From Data Pipeline to Model Training
+
+Ray Data is designed to be the **connective tissue** between your data pipeline and your ML framework. Instead of materializing intermediate files, you stream data directly from a Ray Dataset into PyTorch, TensorFlow, or HuggingFace training loops.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Data Layer"
+        SRC["Cloud Storage\nDatabases\nData Lakes"] --> RD["Ray Dataset\nread / transform / filter"]
+    end
+    subgraph "Training Layer"
+        RD --> PT["PyTorch\niter_torch_batches()"]
+        RD --> TF["TensorFlow\niter_tf_batches()"]
+        RD --> HF["HuggingFace\nTokenize + Train"]
+    end
+    subgraph "Inference Layer"
+        RD2["Ray Dataset"] --> INF["Batch Inference\nmap_batches(Model)"]
+    end
+    style SRC fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style RD fill:#68d391,stroke:#68d391,color:#1a1d27
+    style RD2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style PT fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style TF fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style HF fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style INF fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
+`} />
+
+## Ray Data to PyTorch
+
+The `iter_torch_batches()` method converts Ray Dataset batches into PyTorch tensors on the fly. This replaces the traditional `torch.utils.data.DataLoader` with a streaming, distributed alternative.
+
+<CodeBlock language="python" code={`import ray
+import torch
+# Create a dataset from Parquet
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/training_data/")
+# Iterate as PyTorch tensor batches
+for batch in ds.iter_torch_batches(batch_size=256, dtypes=torch.float32):
+    # batch is a dict of {column_name: torch.Tensor}
+    features = batch["features"]  # shape: (256, num_features)
+    labels = batch["label"]       # shape: (256,)
+    # Forward pass
+    # predictions = model(features)
+    # loss = criterion(predictions, labels)
+    print(f"Batch shape: {features.shape}")
+    break  # just showing one batch`} language="python" filename="pytorch_iter.py" />
+
+### Full Training Loop Example
+
+<CodeBlock language="python" code={`import ray
+import torch
+import torch.nn as nn
+# Prepare data
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/training_data/")
+train_ds, val_ds = ds.train_test_split(test_size=0.2)
+# Define model
+model = nn.Sequential(
+    nn.Linear(128, 64),
+    nn.ReLU(),
+    nn.Linear(64, 1),
+)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+criterion = nn.BCEWithLogitsLoss()
+# Training loop with Ray Data
+for epoch in range(10):
+    model.train()
+    total_loss = 0
+    num_batches = 0
+    for batch in train_ds.iter_torch_batches(batch_size=512, dtypes=torch.float32):
+        features = batch["features"]
+        labels = batch["label"].unsqueeze(1)
+        optimizer.zero_grad()
+        predictions = model(features)
+        loss = criterion(predictions, labels)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        num_batches += 1
+    avg_loss = total_loss / max(num_batches, 1)
+    print(f"Epoch {epoch}: avg_loss={avg_loss:.4f}")`} language="python" filename="pytorch_training.py" />
+
+## Ray Data to TensorFlow
+
+For TensorFlow workflows, `iter_tf_batches()` yields batches as TensorFlow tensors or NumPy arrays compatible with `tf.data`.
+
+<CodeBlock language="python" code={`import ray
+import tensorflow as tf
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/training_data/")
+# Iterate as TensorFlow-compatible batches
+for batch in ds.iter_tf_batches(batch_size=256):
+    features = batch["features"]  # tf.Tensor or numpy array
+    labels = batch["label"]
+    print(f"Features shape: {features.shape}")
+    break
+# Convert to tf.data.Dataset for Keras model.fit()
+def to_tf_dataset(ray_ds, batch_size=256):
+    def generator():
+        for batch in ray_ds.iter_tf_batches(batch_size=batch_size):
+            yield batch["features"], batch["label"]
+    return tf.data.Dataset.from_generator(
+        generator,
+        output_signature=(
+            tf.TensorSpec(shape=(None, 128), dtype=tf.float32),
+            tf.TensorSpec(shape=(None,), dtype=tf.float32),
+        ),
+    )
+tf_ds = to_tf_dataset(ds)
+# model.fit(tf_ds, epochs=10)`} language="python" filename="tensorflow_iter.py" />
+
+## HuggingFace Integration
+
+HuggingFace models and tokenizers integrate naturally with Ray Data's `map_batches()`. This is powerful for both **preprocessing** (tokenization) and **batch inference**.
+
+### Tokenization as a Map Operation
+
+<CodeBlock language="python" code={`import ray
+from transformers import AutoTokenizer
+# Load raw text data
+ds = ray.data.read_json("s3://YOUR_BUCKET/raw_text/reviews.jsonl")
+# Tokenize using map_batches
+class TokenizeText:
+    def __init__(self):
+        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    def __call__(self, batch):
+        encoded = self.tokenizer(
+            batch["text"].tolist(),
+            padding="max_length",
+            truncation=True,
+            max_length=128,
+            return_tensors="np",
+        )
+        return {
+            "input_ids": encoded["input_ids"],
+            "attention_mask": encoded["attention_mask"],
+            "label": batch["label"],
+        }
+tokenized_ds = ds.map_batches(
+    TokenizeText,
+    batch_format="pandas",
+    concurrency=4,  # number of tokenizer actors
+)
+print(tokenized_ds.schema())
+print(tokenized_ds.take(1))`} language="python" filename="hf_tokenize.py" />
+
+### Batch Inference with HuggingFace Models
+
+<CodeBlock language="python" code={`import ray
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch
+class SentimentPredictor:
+    def __init__(self):
+        self.model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            self.model_name
+        )
+        self.model.eval()
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+    def __call__(self, batch):
+        texts = batch["text"].tolist()
+        encoded = self.tokenizer(
+            texts, padding=True, truncation=True,
+            max_length=512, return_tensors="pt",
+        )
+        if torch.cuda.is_available():
+            encoded = {k: v.cuda() for k, v in encoded.items()}
+        with torch.no_grad():
+            outputs = self.model(**encoded)
+            predictions = torch.softmax(outputs.logits, dim=-1)
+        return {
+            "text": batch["text"],
+            "sentiment_score": predictions[:, 1].cpu().numpy(),
+            "label": predictions.argmax(dim=-1).cpu().numpy(),
+        }
+ds = ray.data.read_json("s3://YOUR_BUCKET/reviews/")
+# Run inference with actor pool (model loaded once per actor)
+results = ds.map_batches(
+    SentimentPredictor,
+    batch_format="pandas",
+    concurrency=4,         # 4 model replicas
+    num_gpus=1,            # 1 GPU per replica
+    batch_size=32,         # inference batch size
+)
+results.write_parquet("s3://YOUR_BUCKET/predictions/")`} language="python" filename="hf_inference.py" />
+
+## Ray Train Integration
+
+For distributed training, Ray Train accepts Ray Datasets directly. The `Trainer` handles data sharding across workers automatically.
+
+<MermaidDiagram chart={`graph TB
+    subgraph "Data Pipeline"
+        DS["Ray Dataset\n(read + transform)"] --> SPLIT["train_test_split()"]
+        SPLIT --> TRAIN_DS["Train Dataset"]
+        SPLIT --> VAL_DS["Val Dataset"]
+    end
+    subgraph "Ray Train"
+        TRAINER["TorchTrainer(\n  datasets={'train': train_ds, 'val': val_ds}\n)"]
+        TRAIN_DS --> TRAINER
+        VAL_DS --> TRAINER
+        TRAINER --> TW1["Train Worker 1\n(GPU 0)"]
+        TRAINER --> TW2["Train Worker 2\n(GPU 1)"]
+        TRAINER --> TW3["Train Worker 3\n(GPU 2)"]
+    end
+    style DS fill:#68d391,stroke:#68d391,color:#1a1d27
+    style SPLIT fill:#242734,stroke:#68d391,color:#e0e0e0
+    style TRAIN_DS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style VAL_DS fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style TRAINER fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
+    style TW1 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
+    style TW2 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
+    style TW3 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
+`} />
+
+<CodeBlock language="python" code={`import ray
+from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
+import torch
+import torch.nn as nn
+# Prepare datasets
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/training_data/")
+train_ds, val_ds = ds.train_test_split(test_size=0.2)
+# Define training function
+def train_func(config):
+    from ray.train import get_dataset_shard
+    import ray.train as train
+    model = nn.Sequential(
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        nn.Linear(64, 10),
+    )
+    model = train.torch.prepare_model(model)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    criterion = nn.CrossEntropyLoss()
+    # Get this worker's shard of the dataset
+    train_shard = get_dataset_shard("train")
+    for epoch in range(config["epochs"]):
+        for batch in train_shard.iter_torch_batches(batch_size=256):
+            features = batch["features"]
+            labels = batch["label"]
+            optimizer.zero_grad()
+            loss = criterion(model(features), labels)
+            loss.backward()
+            optimizer.step()
+        train.report({"epoch": epoch, "loss": loss.item()})
+# Launch distributed training
+trainer = TorchTrainer(
+    train_loop_per_worker=train_func,
+    train_loop_config={"lr": 0.001, "epochs": 10},
+    datasets={"train": train_ds, "validation": val_ds},
+    scaling_config=ScalingConfig(
+        num_workers=4,
+        use_gpu=True,
+    ),
+)
+result = trainer.fit()
+print(f"Final loss: {result.metrics['loss']}")`} language="python" filename="ray_train_integration.py" />
+
+## Preprocessor Chains
+
+Ray Data supports chaining multiple preprocessing steps into a **Preprocessor** that can be saved and applied consistently during both training and inference.
+
+<CodeBlock language="python" code={`from ray.data.preprocessors import (
+    Chain,
+    StandardScaler,
+    OneHotEncoder,
+    LabelEncoder,
+)
+import ray
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/features/")
+# Build a preprocessor chain
+preprocessor = Chain(
+    LabelEncoder(columns=["category"]),
+    OneHotEncoder(columns=["region", "device_type"]),
+    StandardScaler(columns=["age", "income", "score"]),
+)
+# Fit and transform
+preprocessor.fit(ds)
+transformed_ds = preprocessor.transform(ds)
+# The same preprocessor can be applied to new data at inference time
+# ensuring consistency between training and serving
+new_data = ray.data.read_parquet("s3://YOUR_BUCKET/new_features/")
+new_transformed = preprocessor.transform(new_data)
+print(transformed_ds.schema())`} language="python" filename="preprocessor_chain.py" />
+
+## Batch Inference at Scale
+
+The combination of `map_batches()` with `ActorPoolStrategy` (or the `concurrency` parameter) is Ray Data's pattern for **scalable batch inference**. Each actor loads the model once and processes many batches.
+
+<CodeBlock language="python" code={`import ray
+import numpy as np
+class ImageClassifier:
+    def __init__(self):
+        import torchvision.models as models
+        import torch
+        self.model = models.resnet50(pretrained=True)
+        self.model.eval()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = self.model.to(self.device)
+    def __call__(self, batch):
+        import torch
+        # batch["image"] is a numpy array of preprocessed images
+        images = torch.tensor(batch["image"], dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            outputs = self.model(images)
+            predictions = outputs.argmax(dim=-1).cpu().numpy()
+        return {"path": batch["path"], "class_id": predictions}
+# Read image dataset
+ds = ray.data.read_images("s3://YOUR_BUCKET/images/", mode="RGB")
+# Run batch inference across 8 GPU actors
+predictions = ds.map_batches(
+    ImageClassifier,
+    concurrency=8,
+    num_gpus=1,
+    batch_size=64,
+)
+predictions.write_parquet("s3://YOUR_BUCKET/image_predictions/")`} language="python" filename="batch_inference.py" />
+
+**Key pattern:** Use a class with `__init__` (load model once) and `__call__` (process each batch). Set `concurrency` to control the number of model replicas and `num_gpus` to assign GPU resources per replica.

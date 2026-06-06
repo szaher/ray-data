@@ -1,0 +1,307 @@
+---
+title: "Databases & Warehouses"
+quiz:
+  - question: "Why does ray.data.read_sql() require a create_connection callable instead of a raw connection object?"
+    options:
+      - "Because Ray Data only supports async database drivers"
+      - "Because each parallel worker needs its own connection, so a factory function lets each worker create one independently"
+      - "Because connection objects cannot be serialized, and the callable is never actually invoked"
+      - "Because Ray Data pools connections internally and needs the factory to control pool size"
+    correctIndex: 1
+    explanation: "Ray Data distributes read tasks across multiple workers. A raw connection object cannot be safely shared or serialized across processes. By accepting a callable factory, each worker creates its own connection independently, enabling safe parallel reads."
+  - question: "What is the recommended approach for reading a large MongoDB collection with Ray Data?"
+    options:
+      - "Use read_mongo() with a single query and let Ray handle all parallelism automatically"
+      - "Export to CSV first, then use read_csv()"
+      - "Use read_mongo() with a pipeline that includes $match stages early to reduce the data transferred"
+      - "Connect via the MongoDB JDBC driver using read_sql()"
+    correctIndex: 2
+    explanation: "Placing $match (filter) stages early in the MongoDB aggregation pipeline pushes filtering to the database, reducing the volume of data transferred over the network. This is the MongoDB equivalent of predicate pushdown."
+---
+
+## Connecting Ray Data to Databases
+
+While file-based formats (Parquet, CSV) are the bread and butter of Ray Data, many production pipelines need to read from or write to **relational databases**, **document stores**, and **cloud data warehouses**. Ray Data provides native connectors for SQL databases and MongoDB, and you can integrate with warehouses like BigQuery and Snowflake through their Python SDKs.
+
+<MermaidDiagram chart={`graph TB
+    subgraph "Data Sources"
+        PG["PostgreSQL"]
+        MY["MySQL"]
+        MG["MongoDB"]
+        BQ["BigQuery"]
+        SF["Snowflake"]
+    end
+    subgraph "Ray Cluster"
+        D[Driver] --> W1[Worker 1]
+        D --> W2[Worker 2]
+        D --> W3[Worker 3]
+    end
+    PG --> W1
+    MY --> W1
+    MG --> W2
+    BQ --> W3
+    SF --> W3
+    subgraph "Output"
+        DS["Ray Dataset"]
+    end
+    W1 --> DS
+    W2 --> DS
+    W3 --> DS
+    style PG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style MY fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style MG fill:#68d391,stroke:#68d391,color:#1a1d27
+    style BQ fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style SF fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style D fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W2 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W3 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style DS fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## SQL Databases with read_sql()
+
+The `ray.data.read_sql()` API reads from any database that provides a **DBAPI 2.0** compatible driver. You supply a SQL query and a **connection factory** -- a callable that returns a fresh connection.
+
+### PostgreSQL
+
+<CodeBlock language="python" code={`import ray
+# Connection factory: each worker calls this to get its own connection
+def create_connection():
+    import psycopg2
+    return psycopg2.connect(
+        host="YOUR_DB_HOST",
+        port=5432,
+        dbname="YOUR_DATABASE",
+        user="YOUR_USER",
+        password="YOUR_PASSWORD",
+    )
+# Read the entire table
+ds = ray.data.read_sql(
+    "SELECT * FROM events WHERE created_at >= '2024-01-01'",
+    create_connection,
+)
+print(ds.schema())
+print(f"Rows: {ds.count()}")`} language="python" filename="read_postgres.py" />
+
+### Parallelizing SQL Reads
+
+By default, `read_sql()` runs the query in a single task. For large tables, you can **partition the read** across multiple workers using the `parallelism` parameter with a partitioning column.
+
+<CodeBlock language="python" code={`import ray
+def create_connection():
+    import psycopg2
+    return psycopg2.connect(
+        host="YOUR_DB_HOST",
+        port=5432,
+        dbname="analytics",
+        user="YOUR_USER",
+        password="YOUR_PASSWORD",
+    )
+# Parallel read: Ray splits the query by the partition column's value range
+ds = ray.data.read_sql(
+    "SELECT user_id, event_type, timestamp FROM events",
+    create_connection,
+    parallelism=8,  # number of parallel read tasks
+)`} language="python" filename="parallel_sql.py" />
+
+### MySQL
+
+The same pattern works with MySQL using `pymysql` or `mysql-connector-python`:
+
+<CodeBlock language="python" code={`import ray
+def create_mysql_connection():
+    import pymysql
+    return pymysql.connect(
+        host="YOUR_MYSQL_HOST",
+        port=3306,
+        database="YOUR_DATABASE",
+        user="YOUR_USER",
+        password="YOUR_PASSWORD",
+        charset="utf8mb4",
+    )
+ds = ray.data.read_sql(
+    "SELECT * FROM products WHERE category = 'electronics'",
+    create_mysql_connection,
+)
+# Process in Ray
+ds = ds.map(lambda row: {
+    **row,
+    "price_with_tax": row["price"] * 1.08,
+})`} language="python" filename="read_mysql.py" />
+
+## MongoDB with read_mongo()
+
+For document databases, Ray Data provides `read_mongo()` which connects directly to MongoDB and supports aggregation pipelines.
+
+<CodeBlock language="python" code={`import ray
+# Basic read from a MongoDB collection
+ds = ray.data.read_mongo(
+    uri="mongodb://YOUR_USER:YOUR_PASSWORD@YOUR_MONGO_HOST:27017",
+    database="analytics",
+    collection="user_events",
+)
+print(ds.schema())
+print(ds.take(3))`} language="python" filename="read_mongo_basic.py" />
+
+### Filtering with Aggregation Pipelines
+
+Push filters down to MongoDB using the `pipeline` parameter. This reduces the data transferred over the network.
+
+<CodeBlock language="python" code={`import ray
+# Push filtering to MongoDB with an aggregation pipeline
+ds = ray.data.read_mongo(
+    uri="mongodb://YOUR_USER:YOUR_PASSWORD@YOUR_MONGO_HOST:27017",
+    database="analytics",
+    collection="user_events",
+    pipeline=[
+        {"$match": {"event_type": "purchase", "amount": {"$gte": 100}}},
+        {"$project": {
+            "user_id": 1,
+            "amount": 1,
+            "timestamp": 1,
+            "_id": 0,
+        }},
+    ],
+)
+# Further processing in Ray
+ds = ds.map_batches(lambda batch: batch)  # your transforms here
+print(f"High-value purchases: {ds.count()}")`} language="python" filename="read_mongo_pipeline.py" />
+
+## BigQuery
+
+Google BigQuery does not have a built-in Ray Data connector, but you can integrate using the `google-cloud-bigquery` SDK to export data and then read it with Ray.
+
+<CodeBlock language="python" code={`import ray
+from google.cloud import bigquery
+# Strategy 1: Export BigQuery results to GCS, then read with Ray
+client = bigquery.Client(project="YOUR_GCP_PROJECT")
+# Run query and export to GCS as Parquet
+query = """
+    SELECT user_id, event_type, timestamp, revenue
+    FROM \`YOUR_PROJECT.analytics.events\`
+    WHERE DATE(timestamp) = '2024-06-01'
+"""
+# Export to temporary GCS location
+destination_uri = "gs://YOUR_TEMP_BUCKET/bq_export/events-*.parquet"
+job_config = bigquery.ExtractJobConfig(
+    destination_format=bigquery.DestinationFormat.PARQUET
+)
+query_job = client.query(query)
+query_job.result()  # wait for query to complete
+# Extract to GCS
+extract_job = client.extract_table(
+    query_job.destination,
+    destination_uri,
+    job_config=job_config,
+)
+extract_job.result()  # wait for export
+# Now read with Ray Data (parallel, distributed)
+ds = ray.data.read_parquet("gs://YOUR_TEMP_BUCKET/bq_export/")
+print(f"Rows from BigQuery: {ds.count()}")`} language="python" filename="bigquery_export.py" />
+
+<CodeBlock language="python" code={`import ray
+import pandas as pd
+from google.cloud import bigquery
+# Strategy 2: Use BigQuery Storage Read API via map_batches
+# Best for smaller result sets that fit in driver memory
+def read_bigquery_to_ray(query: str, project: str) -> ray.data.Dataset:
+    """Read BigQuery query results into a Ray Dataset."""
+    client = bigquery.Client(project=project)
+    df = client.query(query).to_dataframe()
+    return ray.data.from_pandas(df)
+ds = read_bigquery_to_ray(
+    query="SELECT * FROM \`YOUR_PROJECT.analytics.daily_metrics\` LIMIT 1000000",
+    project="YOUR_GCP_PROJECT",
+)
+ds = ds.filter(lambda row: row["revenue"] > 0)`} language="python" filename="bigquery_direct.py" />
+
+## Snowflake
+
+Snowflake integration follows a similar export-then-read pattern, or you can use the Snowflake Connector for Python with `read_sql()`.
+
+<CodeBlock language="python" code={`import ray
+# Option 1: Use read_sql() with the Snowflake connector
+def create_snowflake_connection():
+    import snowflake.connector
+    return snowflake.connector.connect(
+        account="YOUR_ACCOUNT.us-east-1",
+        user="YOUR_USER",
+        password="YOUR_PASSWORD",
+        warehouse="YOUR_WAREHOUSE",
+        database="YOUR_DATABASE",
+        schema="PUBLIC",
+        role="YOUR_ROLE",
+    )
+ds = ray.data.read_sql(
+    "SELECT * FROM events WHERE event_date >= '2024-01-01'",
+    create_snowflake_connection,
+)
+print(ds.schema())
+print(f"Rows: {ds.count()}")`} language="python" filename="snowflake_read.py" />
+
+<CodeBlock language="python" code={`import ray
+# Option 2: Snowflake COPY INTO for large exports
+# Export from Snowflake to S3, then read with Ray
+def snowflake_export_to_s3():
+    import snowflake.connector
+    conn = snowflake.connector.connect(
+        account="YOUR_ACCOUNT.us-east-1",
+        user="YOUR_USER",
+        password="YOUR_PASSWORD",
+        warehouse="YOUR_WAREHOUSE",
+        database="YOUR_DATABASE",
+        schema="PUBLIC",
+    )
+    cursor = conn.cursor()
+    cursor.execute("""
+        COPY INTO 's3://YOUR_BUCKET/snowflake_export/events/'
+        FROM (SELECT * FROM events WHERE event_date >= '2024-01-01')
+        FILE_FORMAT = (TYPE = 'PARQUET')
+        HEADER = TRUE
+        OVERWRITE = TRUE
+        CREDENTIALS = (
+            AWS_KEY_ID = 'YOUR_ACCESS_KEY'
+            AWS_SECRET_KEY = 'YOUR_SECRET_KEY'
+        )
+    """)
+    conn.close()
+# Export first, then read in parallel with Ray
+snowflake_export_to_s3()
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/snowflake_export/events/")`} language="python" filename="snowflake_export.py" />
+
+## Connection Pooling and Parallelism Considerations
+
+When reading from databases in parallel, keep these practices in mind:
+
+**Connection limits** -- Each parallel Ray worker opens its own database connection. If you set `parallelism=32`, that is 32 simultaneous connections. Make sure your database can handle the load.
+
+**Read-only access** -- Use read replicas for analytical queries to avoid impacting your production write path.
+
+**Network topology** -- Place your Ray cluster in the same region and VPC as your database to minimize latency and data transfer costs.
+
+<CodeBlock language="python" code={`import ray
+# Be mindful of connection limits
+# Bad: 100 parallel connections to a small database
+# ds = ray.data.read_sql(query, create_connection, parallelism=100)
+# Better: limit parallelism to what the database can handle
+ds = ray.data.read_sql(
+    "SELECT * FROM large_table",
+    create_connection,
+    parallelism=8,  # matches database max_connections budget
+)
+# Best practice: use a read replica for analytical workloads
+def create_replica_connection():
+    import psycopg2
+    return psycopg2.connect(
+        host="YOUR_READ_REPLICA_HOST",  # read replica endpoint
+        port=5432,
+        dbname="analytics",
+        user="readonly_user",
+        password="YOUR_PASSWORD",
+    )
+ds = ray.data.read_sql(
+    "SELECT * FROM events",
+    create_replica_connection,
+    parallelism=16,
+)`} language="python" filename="connection_best_practices.py" />

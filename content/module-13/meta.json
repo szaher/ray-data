@@ -1,0 +1,37 @@
+{
+  "id": 13,
+  "title": "Cheat Sheet & Quick Reference",
+  "description": "All the essential Ray Data APIs, patterns, and recipes in one place",
+  "color": "#ecc94b",
+  "lessons": [
+    {
+      "slug": "01-api-reference",
+      "title": "Ray Data API Cheat Sheet",
+      "description": "Essential read, transform, write, and configuration APIs at a glance",
+      "estimatedMinutes": 5,
+      "diagramTypes": [],
+      "hasCode": true,
+      "hasQuiz": false
+    },
+    {
+      "slug": "02-patterns-recipes",
+      "title": "Common Patterns & Recipes",
+      "description": "Copy-paste patterns for filtering, joining, aggregating, and more",
+      "estimatedMinutes": 8,
+      "diagramTypes": [
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": false
+    },
+    {
+      "slug": "03-config-tuning",
+      "title": "Configuration & Tuning Reference",
+      "description": "All the knobs: parallelism, batch size, memory, and resource allocation",
+      "estimatedMinutes": 8,
+      "diagramTypes": [],
+      "hasCode": true,
+      "hasQuiz": false
+    }
+  ]
+}

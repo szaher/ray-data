@@ -26,7 +26,7 @@ export default function Sidebar({ curriculum }: SidebarProps) {
   const overallProgress = totalLessons > 0 ? completedLessons / totalLessons : 0;
 
   return (
-    <aside className="w-64 min-h-0 flex flex-col border-r border-white/[0.08] bg-[var(--bg-secondary)]">
+    <aside className="w-64 min-h-0 flex flex-col border-r border-[var(--border)] bg-[var(--bg-secondary)]">
       <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {curriculum.modules.map((mod) => {
           const isCollapsed = collapsed[mod.id] ?? false;
@@ -98,7 +98,7 @@ export default function Sidebar({ curriculum }: SidebarProps) {
         })}
       </div>
 
-      <div className="p-4 border-t border-white/[0.08]">
+      <div className="p-4 border-t border-[var(--border)]">
         <div className="text-xs text-[var(--text-secondary)] mb-1.5">
           Progress: {Math.round(overallProgress * 100)}%
         </div>

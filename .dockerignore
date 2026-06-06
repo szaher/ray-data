@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+exports
+.superpowers
+docs
+__tests__
+*.md
+!content/**/*.mdx
+.env*
+.vscode
+.idea

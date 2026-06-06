@@ -1,13 +1,76 @@
 {
   "id": 4,
-  "title": "Intermediate",
-  "description": "Production patterns: GPU inference, streaming, ML integration",
-  "color": "#ed8936",
+  "title": "Ray Data Basics",
+  "description": "The Dataset API: reading, transforming, and consuming data",
+  "color": "#b794f4",
   "lessons": [
-    { "slug": "01-gpu-batch-inference", "title": "GPU Batch Inference", "description": "map_batches with num_gpus, actor pools", "estimatedMinutes": 18, "diagramTypes": ["pipeline", "resource"], "hasCode": true, "hasQuiz": true },
-    { "slug": "02-streaming-execution", "title": "Streaming Execution", "description": "Windowed execution and operator concurrency", "estimatedMinutes": 15, "diagramTypes": ["streaming", "pipeline"], "hasCode": true, "hasQuiz": true },
-    { "slug": "03-data-train", "title": "Ray Data + Ray Train", "description": "Feeding datasets into distributed training", "estimatedMinutes": 18, "diagramTypes": ["integration", "data-flow"], "hasCode": true, "hasQuiz": true },
-    { "slug": "04-data-serve", "title": "Ray Data + Ray Serve", "description": "Online inference pipelines", "estimatedMinutes": 15, "diagramTypes": ["deployment", "pipeline"], "hasCode": true, "hasQuiz": true },
-    { "slug": "05-preprocessors", "title": "Data Preprocessors for ML", "description": "Built-in and custom preprocessors", "estimatedMinutes": 12, "diagramTypes": ["chain", "comparison"], "hasCode": true, "hasQuiz": true }
+    {
+      "slug": "01-what-is-ray-data",
+      "title": "What is Ray Data?",
+      "description": "The Dataset concept and when to use it",
+      "estimatedMinutes": 10,
+      "diagramTypes": [
+        "comparison",
+        "architecture"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-reading-data",
+      "title": "Reading Data",
+      "description": "read_csv, read_parquet, read_json, read_images",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-transformations",
+      "title": "Transformations",
+      "description": "map, map_batches, filter, flat_map",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "pipeline",
+        "comparison"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-consuming-data",
+      "title": "Consuming Data",
+      "description": "iter_batches, iter_torch_batches, show, take",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "05-schemas-types",
+      "title": "Schemas & Types",
+      "description": "Arrow-based type system",
+      "estimatedMinutes": 10,
+      "diagramTypes": [
+        "schema"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "06-lazy-execution",
+      "title": "Lazy Execution & Materialization",
+      "description": "Deferred execution and when it actually runs",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "execution-graph"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
   ]
 }

@@ -1,0 +1,153 @@
+---
+title: "Ray Data + Feature Stores"
+quiz:
+  - question: "What is the difference between offline and online feature stores?"
+    options:
+      - "Offline stores use Python, online stores use Java"
+      - "Offline stores hold historical features for training; online stores serve low-latency features for inference"
+      - "Online stores are always faster to write to"
+      - "There is no difference; they are the same thing"
+    correctIndex: 1
+    explanation: "Offline stores hold large historical feature tables used for training data generation. Online stores hold the latest feature values and serve them at low latency for real-time model inference."
+  - question: "Why is Ray Data a good fit for computing features that go into a feature store?"
+    options:
+      - "Ray Data can only produce features in Feast format"
+      - "Ray Data replaces the feature store entirely"
+      - "Ray Data scales feature computation across a cluster and writes directly to offline/online stores"
+      - "Ray Data is the only way to read from Feast"
+    correctIndex: 2
+    explanation: "Ray Data excels at the compute layer: it distributes feature transformation logic across many workers, then writes the results to a feature store like Feast for serving. The feature store handles storage and retrieval."
+---
+
+## The Feature Store Pattern
+
+ML models need features at two moments: **training** (batch, historical data) and **inference** (real-time, latest values). A feature store bridges these two worlds, and Ray Data is ideal for the compute layer that feeds it.
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Feature Computation (Ray Data)"
+        RAW[Raw Data\nEvents, Logs, Tables] --> PIPE[Ray Data Pipeline\nClean + Transform]
+    end
+    subgraph "Feature Store (Feast)"
+        PIPE --> OFF[Offline Store\nParquet / BigQuery]
+        PIPE --> ON[Online Store\nRedis / DynamoDB]
+    end
+    subgraph Consumers
+        OFF --> TRAIN[Training\nBatch Retrieval]
+        ON --> SERVE[Serving\nLow-Latency Lookup]
+    end
+    style RAW fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PIPE fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style OFF fill:#68d391,stroke:#68d391,color:#1a1d27
+    style ON fill:#68d391,stroke:#68d391,color:#1a1d27
+    style TRAIN fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style SERVE fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Computing Features with Ray Data
+
+The first step is defining feature transformations as Ray Data operations. These transforms run at scale across a cluster, then produce outputs in a format the feature store can ingest.
+
+<CodeBlock language="python" code={`import ray
+import pandas as pd
+
+def compute_user_features(batch: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate user-level features from raw events."""
+    features = batch.groupby("user_id").agg(
+        total_purchases=("amount", "sum"),
+        avg_purchase=("amount", "mean"),
+        purchase_count=("amount", "count"),
+        last_active=("timestamp", "max"),
+    ).reset_index()
+
+    features["days_since_active"] = (
+        pd.Timestamp.utcnow() - features["last_active"]
+    ).dt.days
+    return features
+
+# Scale feature computation across the cluster
+ds = ray.data.read_parquet("s3://data-lake/events/purchases/")
+features_ds = ds.map_batches(
+    compute_user_features, batch_size=10_000
+)
+
+# Write to the offline store location
+features_ds.write_parquet("s3://feature-store/offline/user_features/")`} />
+
+## Feast Integration
+
+Feast is a popular open-source feature store. After Ray Data computes features and writes them to storage, Feast manages versioning, retrieval, and online/offline consistency.
+
+<CodeBlock language="python" code={`# feature_repo/features.py — Feast feature definition
+from feast import Entity, FeatureView, FileSource, Field
+from feast.types import Float32, Int64
+from datetime import timedelta
+
+user = Entity(name="user_id", join_keys=["user_id"])
+
+user_features_source = FileSource(
+    path="s3://feature-store/offline/user_features/",
+    timestamp_field="last_active",
+)
+
+user_features_view = FeatureView(
+    name="user_features",
+    entities=[user],
+    ttl=timedelta(days=1),
+    schema=[
+        Field(name="total_purchases", dtype=Float32),
+        Field(name="avg_purchase", dtype=Float32),
+        Field(name="purchase_count", dtype=Int64),
+        Field(name="days_since_active", dtype=Int64),
+    ],
+    source=user_features_source,
+)`} />
+
+<CodeBlock language="python" code={`# Retrieve features for training (offline) and serving (online)
+from feast import FeatureStore
+
+store = FeatureStore(repo_path="./feature_repo")
+
+# Offline: get historical features for training
+training_data = store.get_historical_features(
+    entity_df=entity_df,  # DataFrame with user_id + timestamps
+    features=[
+        "user_features:total_purchases",
+        "user_features:avg_purchase",
+        "user_features:days_since_active",
+    ],
+).to_df()
+
+# Online: get latest features for real-time inference
+online_features = store.get_online_features(
+    entity_rows=[{"user_id": "u_12345"}],
+    features=["user_features:total_purchases"],
+).to_dict()`} />
+
+## End-to-End Architecture
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Scheduled Job"
+        A[Ray Data\nCompute Features] --> B[Write Parquet\nOffline Store]
+        B --> C["feast materialize\nSync to Online"]
+    end
+    subgraph "Training"
+        B --> D[get_historical_features\nBatch Retrieval]
+        D --> E[Ray Train\nModel Training]
+    end
+    subgraph "Serving"
+        C --> F[Online Store\nRedis]
+        F --> G[Ray Serve\nModel Inference]
+    end
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#68d391,stroke:#68d391,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style G fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Key Takeaways
+
+- **Ray Data handles computation**, the feature store handles storage and retrieval -- each does what it is best at
+- Write Ray Data outputs to the **offline store** (Parquet/BigQuery), then materialize to the **online store** (Redis/DynamoDB)
+- **Feast** provides versioned feature definitions, point-in-time-correct joins for training, and low-latency online lookups
+- This pattern gives you **one source of truth** for features used in both training and serving

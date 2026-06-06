@@ -1,0 +1,118 @@
+---
+title: "Tasks"
+quiz:
+  - question: "What does ray.get() do?"
+    options:
+      - "Submits a task to the cluster"
+      - "Blocks until the result is ready and returns the value"
+      - "Creates a new ObjectRef"
+      - "Checks if a task has failed"
+    correctIndex: 1
+    explanation: "ray.get() blocks the calling process until the remote task completes and then returns the actual result value from the object store."
+  - question: "What does the @ray.remote decorator do to a function?"
+    options:
+      - "Makes it run faster on a single core"
+      - "Converts it into a Ray task that runs in a separate worker process"
+      - "Automatically parallelizes its internal loops"
+      - "Compiles it to C++ for performance"
+    correctIndex: 1
+    explanation: "The @ray.remote decorator converts a regular Python function into a Ray task. When called with .remote(), it runs asynchronously in a worker process and returns an ObjectRef instead of a value."
+---
+
+## From Functions to Tasks
+
+A Ray **task** is a function that runs in a separate worker process. You create one by adding the `@ray.remote` decorator, then calling it with `.remote()` instead of `()`.
+
+<CodeBlock language="python" code={`import ray
+
+ray.init()
+
+# Regular Python function
+def square(x):
+    return x * x
+
+# Ray task — runs in a worker process
+@ray.remote
+def square_remote(x):
+    return x * x
+
+# Calling a task returns an ObjectRef, not the value
+ref = square_remote.remote(4)   # Returns immediately
+result = ray.get(ref)           # Blocks until done → 16
+`} />
+
+## The Execution Model
+
+When you call `.remote()`, three things happen: the function and its arguments are serialized, the task is scheduled onto an available worker, and an `ObjectRef` is returned immediately. Your driver script keeps running — it does not wait.
+
+<MermaidDiagram chart={`graph LR
+    D[Driver Process] -->|".remote(4)"| S[Scheduler]
+    S -->|assign| W1[Worker 1]
+    S -->|assign| W2[Worker 2]
+    D -->|"returns ObjectRef\nimmediately"| D
+    W1 -->|"result → Object Store"| OS[Object Store]
+    W2 -->|"result → Object Store"| OS
+    D -->|"ray.get(ref)"| OS
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OS fill:#242734,stroke:#fc8181,color:#e0e0e0
+`} />
+
+## Parallel Execution
+
+The real power of tasks is launching many at once. Submit all your work, then collect results:
+
+<CodeBlock language="python" code={`import ray
+import time
+
+@ray.remote
+def slow_square(x):
+    time.sleep(1)  # Simulate expensive work
+    return x * x
+
+# WRONG: Sequential — takes 10 seconds
+results = []
+for i in range(10):
+    ref = slow_square.remote(i)
+    results.append(ray.get(ref))  # Blocks each iteration!
+
+# RIGHT: Parallel — takes ~1 second (with 10+ CPUs)
+refs = [slow_square.remote(i) for i in range(10)]
+results = ray.get(refs)  # Block once, get all results
+`} />
+
+## Passing Arguments and Dependencies
+
+Tasks can accept any serializable Python object. You can also pass `ObjectRef`s directly — Ray automatically resolves them before the task runs, creating **task dependencies** without ever fetching data to the driver.
+
+<CodeBlock language="python" code={`@ray.remote
+def load_data(path):
+    import pandas as pd
+    return pd.read_csv(path)
+
+@ray.remote
+def process(df):
+    return df.describe()
+
+# Pipeline: load_data → process (no data hits the driver)
+data_ref = load_data.remote("data.csv")
+result_ref = process.remote(data_ref)  # Pass the ref directly
+stats = ray.get(result_ref)
+`} />
+
+## Resource Requirements
+
+You can specify how many CPUs, GPUs, or custom resources a task needs:
+
+<CodeBlock language="python" code={`@ray.remote(num_cpus=4, num_gpus=1)
+def train_model(data):
+    # This task reserves 4 CPUs and 1 GPU
+    ...
+
+# Override resources at call time
+train_model.options(num_cpus=2).remote(data)
+`} />
+
+Ray's scheduler will only place the task on a node that has the requested resources available. If no node qualifies, the task waits in the queue.

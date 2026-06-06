@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import AnthropicVertex from "@anthropic-ai/vertex-sdk";
 import type { ChatMessage } from "@/types";
 
 interface PromptContext {
@@ -47,35 +47,48 @@ Always use Ray 2.55.1 APIs. Key imports: ray, ray.data. The Dataset class is the
   return prompt;
 }
 
+let _client: AnthropicVertex | null = null;
+
+function getClient(): AnthropicVertex {
+  if (!_client) {
+    _client = new AnthropicVertex({
+      projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID || "itpc-gcp-ai-eng-claude",
+      region: process.env.CLOUD_ML_REGION || "us-east5",
+    });
+  }
+  return _client;
+}
+
 export function streamClaude(
   userMessage: string,
   context?: PromptContext
 ): { stream: AsyncIterable<string>; kill: () => void } {
   const systemPrompt = buildSystemPrompt(context);
-
-  const proc = spawn(
-    "claude",
-    ["--print", "--output-format", "text", "-p", userMessage],
-    {
-      shell: true,
-      env: {
-        ...process.env,
-        CLAUDE_SYSTEM_PROMPT: systemPrompt,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
+  let aborted = false;
 
   const stream = (async function* () {
-    if (!proc.stdout) return;
+    const response = await getClient().messages.stream({
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    });
 
-    for await (const chunk of proc.stdout) {
-      yield chunk.toString();
+    for await (const event of response) {
+      if (aborted) break;
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
+        yield event.delta.text;
+      }
     }
   })();
 
   return {
     stream,
-    kill: () => proc.kill(),
+    kill: () => {
+      aborted = true;
+    },
   };
 }

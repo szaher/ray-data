@@ -12,5 +12,11 @@ interface MDXRemoteProps {
 }
 
 export function MDXRemote({ source }: MDXRemoteProps) {
-  return <BaseMDXRemote source={source} components={components} />;
+  return (
+    <BaseMDXRemote
+      source={source}
+      components={components}
+      options={{ blockJS: false }}
+    />
+  );
 }

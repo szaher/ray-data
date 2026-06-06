@@ -1,0 +1,54 @@
+{
+  "id": 11,
+  "title": "Troubleshooting & Debugging",
+  "description": "Diagnose and fix common Ray Data errors \u2014 OOM, serialization, performance, and more",
+  "color": "#fc8181",
+  "lessons": [
+    {
+      "slug": "01-common-errors",
+      "title": "Common Errors & How to Fix Them",
+      "description": "The top 10 Ray Data errors with solutions and prevention strategies",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-memory-issues",
+      "title": "Memory Issues & OOM Debugging",
+      "description": "Understanding Ray's memory model, diagnosing OOM, and tuning memory",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "architecture",
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-serialization",
+      "title": "Serialization Problems",
+      "description": "Pickle failures, unpicklable objects, and serialization best practices",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-performance-debugging",
+      "title": "Performance Debugging",
+      "description": "Profiling slow pipelines, finding bottlenecks, and optimizing throughput",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "flowchart",
+        "comparison"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
+  ]
+}

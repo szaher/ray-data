@@ -1,0 +1,92 @@
+---
+title: "Ray Data + Ray Serve Online"
+quiz:
+  - question: "What is the role of Ray Data transforms inside a Ray Serve deployment?"
+    options:
+      - "They replace Ray Serve entirely"
+      - "They perform online feature engineering, reusing the same logic as the batch pipeline"
+      - "They store the model weights"
+      - "They handle HTTP routing"
+    correctIndex: 1
+    explanation: "Ray Data transforms provide the same preprocessing used in batch training. Reusing them in serving ensures training-serving consistency."
+  - question: "Why wrap the model in a deployment class rather than loading it per request?"
+    options:
+      - "Python does not allow global variables"
+      - "The model loads once in __init__ and is reused for every request, avoiding repeated loading"
+      - "Ray Serve requires exactly one class per application"
+      - "It is needed for HTTP parsing"
+    correctIndex: 1
+    explanation: "Loading a model takes seconds to minutes. Placing it in __init__ loads once at startup and reuses for all requests — critical for low latency."
+---
+
+## From Batch Pipeline to Online Endpoint
+
+A common challenge: you build preprocessing for training, then rewrite it for serving. With shared transforms, both paths stay in sync.
+
+<MermaidDiagram chart={`graph LR
+    A[HTTP Request] --> B[Ray Serve\nDeployment]
+    B --> C[Feature Engineering\nShared transforms]
+    C --> D[Model Inference\nGPU]
+    D --> E[HTTP Response]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#68d391,stroke:#68d391,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style D fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style E fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Shared Preprocessing Logic
+
+<CodeBlock language="python" code={`import numpy as np
+
+def compute_features(batch: dict) -> dict:
+    amounts = np.array(batch["amount"], dtype=np.float32)
+    batch["log_amount"] = np.log1p(amounts)
+    batch["is_high_value"] = (amounts > 1000).astype(np.int32)
+    hours = np.array([int(t[11:13]) for t in batch["timestamp"]])
+    batch["hour_sin"] = np.sin(2 * np.pi * hours / 24).astype(np.float32)
+    batch["hour_cos"] = np.cos(2 * np.pi * hours / 24).astype(np.float32)
+    return batch
+`} />
+
+## Ray Serve Deployment
+
+<CodeBlock language="python" code={`from ray import serve
+from starlette.requests import Request
+
+@serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
+class FraudDetector:
+    def __init__(self):
+        import torch
+        self.model = torch.jit.load("model.pt").eval().cuda()
+
+    async def __call__(self, request: Request) -> dict:
+        import torch
+        payload = await request.json()
+        features = compute_features({
+            "amount": [payload["amount"]],
+            "timestamp": [payload["timestamp"]],
+        })
+        tensor = torch.tensor([[
+            features["log_amount"][0], features["is_high_value"][0],
+            features["hour_sin"][0], features["hour_cos"][0],
+        ]], dtype=torch.float32).cuda()
+        with torch.no_grad():
+            score = self.model(tensor).item()
+        return {"fraud_score": score, "is_fraud": score > 0.5}
+
+app = FraudDetector.bind()
+serve.run(app, route_prefix="/predict")
+`} />
+
+## Testing the Endpoint
+
+<CodeBlock language="python" code={`import requests
+
+resp = requests.post("http://localhost:8000/predict", json={
+    "amount": 5432.10, "timestamp": "2025-06-15T02:30:00Z",
+})
+print(resp.json())  # {"fraud_score": 0.87, "is_fraud": true}
+`} />
+
+The key insight: **compute_features** is identical in both batch and online paths. Update feature logic once and both pipelines stay in sync — eliminating training-serving skew.

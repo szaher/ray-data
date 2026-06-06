@@ -1,0 +1,122 @@
+---
+title: "Ray Data + Ray Serve"
+quiz:
+  - question: "What role does Ray Data play in a Ray Serve deployment?"
+    options:
+      - "It replaces Ray Serve for model serving"
+      - "It provides preprocessing pipelines that run before model inference at request time"
+      - "It stores the model weights on disk"
+      - "It manages HTTP routing between services"
+    correctIndex: 1
+    explanation: "Ray Data powers the data preprocessing stage in an online inference pipeline. The same transformations used during training can be applied to incoming requests before passing them to the model."
+  - question: "Why is it valuable to reuse Ray Data preprocessors between training and serving?"
+    options:
+      - "It reduces code duplication"
+      - "It prevents training-serving skew where different preprocessing produces wrong predictions"
+      - "It is required by Ray Serve"
+      - "It makes the API faster"
+    correctIndex: 1
+    explanation: "Training-serving skew occurs when preprocessing differs between training and inference, leading to degraded model accuracy. Reusing the same Ray Data preprocessors guarantees consistency."
+---
+
+## From Training to Serving
+
+A common production pitfall is **training-serving skew** -- the model was trained with one preprocessing pipeline, but serves with a different one. Ray Data lets you define preprocessing once and reuse it in both contexts.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Training Pipeline"
+    TD[Training Data] --> PP1["Preprocessor\n(Ray Data)"] --> MODEL1[Train Model]
+    end
+    subgraph "Serving Pipeline"
+    REQ[HTTP Request] --> PP2["Same Preprocessor\n(Ray Data)"] --> MODEL2[Run Inference]
+    MODEL2 --> RESP[Response]
+    end
+    style PP1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PP2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style MODEL1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style MODEL2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style RESP fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
+`} />
+
+## A Basic Ray Serve Deployment
+
+Ray Serve deployments are Python classes decorated with `@serve.deployment`. You load the model in `__init__` and handle requests in `__call__`.
+
+<CodeBlock language="python" code={`import ray
+from ray import serve
+import numpy as np
+
+@serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
+class TextClassifier:
+    def __init__(self):
+        from transformers import pipeline
+        self.model = pipeline(
+            "text-classification",
+            model="distilbert-base-uncased-finetuned-sst-2-english",
+            device=0,
+        )
+
+    async def __call__(self, request):
+        data = await request.json()
+        text = data["text"]
+        result = self.model(text)
+        return {"label": result[0]["label"], "score": result[0]["score"]}
+
+app = TextClassifier.bind()
+serve.run(app)`} />
+
+## Composing a Multi-Stage Pipeline
+
+For multi-step pipelines, compose deployments using `.bind()`. The preprocessor handles tokenization before the model runs inference.
+
+<CodeBlock language="python" code={`@serve.deployment(num_replicas=2)
+class Preprocessor:
+    def __init__(self):
+        from transformers import AutoTokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+
+    async def __call__(self, text: str) -> dict:
+        return self.tokenizer(text, padding="max_length", truncation=True, max_length=128)
+
+@serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
+class ModelInference:
+    def __init__(self, preprocessor):
+        import torch
+        from transformers import AutoModelForSequenceClassification
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            "distilbert-base-uncased-finetuned-sst-2-english"
+        ).cuda().eval()
+        self.preprocessor = preprocessor
+
+    async def __call__(self, request):
+        import torch
+        data = await request.json()
+        tokens = await self.preprocessor.remote(data["text"])
+        input_ids = torch.tensor([tokens["input_ids"]]).cuda()
+        with torch.no_grad():
+            pred = self.model(input_ids).logits.argmax(dim=1).item()
+        return {"class": pred}
+
+preprocessor = Preprocessor.bind()
+app = ModelInference.bind(preprocessor)
+serve.run(app)`} />
+
+## Deployment Architecture
+
+<MermaidDiagram chart={`graph TD
+    CLIENT["HTTP Client"] --> INGRESS["Ray Serve Ingress"]
+    INGRESS --> P1["Preprocessor\nReplica 1 (CPU)"]
+    INGRESS --> P2["Preprocessor\nReplica 2 (CPU)"]
+    P1 --> M1["Model\nReplica 1 (GPU)"]
+    P2 --> M2["Model\nReplica 2 (GPU)"]
+    M1 --> CLIENT
+    M2 --> CLIENT
+    style CLIENT fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
+    style INGRESS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style M1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style M2 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+**Key pattern:** CPU-intensive preprocessing scales on cheap CPU replicas, while expensive GPU inference runs on dedicated GPU replicas. Ray Serve autoscales each stage independently based on load.

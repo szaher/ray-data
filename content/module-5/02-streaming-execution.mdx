@@ -1,0 +1,106 @@
+---
+title: "Streaming Execution"
+quiz:
+  - question: "What is the main advantage of streaming execution over bulk (materialized) execution?"
+    options:
+      - "It makes each operation run faster"
+      - "It processes data in windows so the full dataset never needs to fit in memory"
+      - "It removes the need for data partitioning"
+      - "It only works with GPU workloads"
+    correctIndex: 1
+    explanation: "Streaming execution processes data through operators in overlapping windows. Only a subset of the data is materialized at any time, so you can process datasets much larger than available memory."
+  - question: "What does backpressure do in a streaming pipeline?"
+    options:
+      - "Speeds up slow operators by adding more resources"
+      - "Slows down fast upstream operators when a downstream operator falls behind"
+      - "Compresses data to reduce memory usage"
+      - "Discards data that cannot be processed in time"
+    correctIndex: 1
+    explanation: "Backpressure is a flow-control mechanism. When a downstream operator is slower (e.g., GPU inference), Ray Data slows the upstream operators (e.g., data reading) to prevent memory from filling up with unprocessed data."
+---
+
+## Bulk vs. Streaming
+
+By default, Ray Data uses **streaming execution** -- it pipelines operators so reading, transforming, and writing overlap in time. This is the opposite of bulk execution, where each step must finish before the next begins.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Bulk Execution"
+    R1[Read ALL] -->|wait| T1[Transform ALL] -->|wait| W1[Write ALL]
+    end
+    subgraph "Streaming Execution"
+    R2[Read window] -->|overlap| T2[Transform window] -->|overlap| W2[Write window]
+    end
+    style R1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style T1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style W1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style R2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style T2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W2 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## How Streaming Works
+
+Ray Data divides data into blocks and pipelines them through operators. While block N is being transformed, block N+1 is being read, and block N-1 is being written.
+
+<CodeBlock language="python" code={`import ray
+
+# Streaming is the default -- this pipeline never materializes all data
+ds = ray.data.read_parquet("s3://bucket/terabyte-dataset/")
+
+ds = ds.map_batches(preprocess, batch_size=4096)
+ds = ds.map_batches(run_model, batch_size=512, num_gpus=1)
+
+# Data flows through read -> preprocess -> model -> write
+ds.write_parquet("s3://bucket/output/")`} />
+
+## Backpressure and Flow Control
+
+When operators run at different speeds, Ray Data applies **backpressure** -- slowing fast producers to match slow consumers. This prevents memory from growing unbounded.
+
+<MermaidDiagram chart={`graph TD
+    READ["Read\n10K rows/sec"] -->|backpressure slows to 1K/sec| PREP["Preprocess\n5K rows/sec"]
+    PREP -->|backpressure slows to 1K/sec| GPU["GPU Inference\n1K rows/sec"]
+    GPU --> WRITE["Write\n10K rows/sec"]
+    style READ fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PREP fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style GPU fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style WRITE fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Controlling Execution
+
+You can tune streaming behavior with `ExecutionOptions`.
+
+<CodeBlock language="python" code={`import ray
+from ray.data import ExecutionOptions
+
+ctx = ray.data.DataContext.get_current()
+
+# Limit memory to avoid OOM on large pipelines
+ctx.execution_options = ExecutionOptions(
+    resource_limits=ray.data.ExecutionResources(
+        object_store_memory=4 * 1024 * 1024 * 1024,  # 4 GB cap
+    ),
+)
+
+# Pipeline will stay within the 4 GB memory budget
+ds = ray.data.read_parquet("s3://bucket/huge-dataset/")
+ds.map_batches(transform).write_parquet("s3://bucket/out/")`} />
+
+## When to Force Materialization
+
+Sometimes you need the full dataset in memory -- for example, to shuffle globally or to reuse data across multiple passes (training epochs). Use `materialize()` explicitly.
+
+<CodeBlock language="python" code={`# Force full materialization when needed
+ds = ray.data.read_parquet("s3://bucket/data/")
+ds = ds.map_batches(transform)
+
+# Materialize into object store (dataset must fit in cluster memory)
+ds = ds.materialize()
+
+# Now you can iterate multiple times without re-reading
+for epoch in range(10):
+    for batch in ds.iter_batches(batch_size=256):
+        train_step(batch)`} />
+
+Streaming is the default for a reason -- prefer it unless you have a specific need to materialize.

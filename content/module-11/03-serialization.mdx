@@ -1,0 +1,274 @@
+---
+title: "Serialization Problems"
+quiz:
+  - question: "Why does Ray use pickle to send data between workers?"
+    options:
+      - "Pickle is the fastest serialization format available"
+      - "Workers run in separate processes and cannot share Python objects directly — pickle converts objects to bytes for transfer"
+      - "Python requires all inter-process communication to use pickle"
+      - "Pickle is the only format that supports all Python types"
+    correctIndex: 1
+    explanation: "Ray workers are separate Python processes (often on different machines). To send a Python object from one process to another, it must be converted to bytes (serialized) and then reconstructed (deserialized). Ray uses a combination of pickle and Apache Arrow for this."
+  - question: "What is the recommended pattern for using a database connection inside a Ray Data map function?"
+    options:
+      - "Create the connection in the driver and pass it to the map function"
+      - "Use ray.put() to store the connection in the object store"
+      - "Use a class-based transform with the connection created in __init__"
+      - "Use a global variable for the connection"
+    correctIndex: 2
+    explanation: "Class-based transforms create the object once per worker via __init__. The class itself is picklable (it's just a class reference), and __init__ runs on the worker where the unpicklable resource is created locally. This avoids serializing the connection entirely."
+---
+
+## Why Serialization Matters
+
+When you call `ds.map(my_function)`, Ray needs to send `my_function` to every worker. Workers run as separate Python processes, potentially on different machines. The only way to send a Python object between processes is to convert it to bytes (serialize), send the bytes, and reconstruct the object (deserialize).
+
+<MermaidDiagram chart={`sequenceDiagram
+    participant D as Driver Process
+    participant OS as Object Store
+    participant W1 as Worker 1
+    participant W2 as Worker 2
+    D->>D: pickle.dumps(my_function)
+    D->>OS: Store serialized function
+    OS->>W1: Send bytes
+    OS->>W2: Send bytes
+    W1->>W1: pickle.loads(bytes) → function
+    W2->>W2: pickle.loads(bytes) → function
+    W1->>W1: function(data_block_1)
+    W2->>W2: function(data_block_2)
+`} />
+
+Ray uses **cloudpickle** (an enhanced version of Python's pickle) and **Apache Arrow** for tabular data. But not everything can be pickled.
+
+---
+
+## Common Unpicklable Objects
+
+These objects **cannot be serialized** and will cause `TypeError: cannot pickle` errors:
+
+| Object Type | Why It Fails | Example |
+|---|---|---|
+| Database connections | Contains OS-level socket handles | `psycopg2.connect(...)` |
+| File handles | OS file descriptors are process-specific | `open("file.txt")` |
+| Thread locks | Locks are tied to a specific process | `threading.Lock()` |
+| CUDA tensors | GPU memory pointers are device-specific | `tensor.cuda()` |
+| Lambda closures | Often capture unpicklable variables | `lambda x: conn.query(x)` |
+| Generator objects | Internal iteration state cannot be captured | `(x for x in range(10))` |
+
+---
+
+## The Fix: Class-Based Transforms
+
+The most reliable pattern for avoiding serialization issues. The class itself is picklable (Ray just sends the class reference). The `__init__` method runs on each worker, creating unpicklable resources locally.
+
+### Pattern 1: Database Connections
+
+<CodeBlock code={`# BROKEN: Connection created in driver, captured by lambda
+import psycopg2
+conn = psycopg2.connect("postgresql://localhost/mydb")
+ds = ds.map(lambda row: {
+    "result": conn.execute(f"SELECT * FROM lookup WHERE id={row['id']}")
+})
+# TypeError: cannot pickle 'psycopg2.extensions.connection' object
+# FIXED: Connection created per-worker in __init__
+class DatabaseLookup:
+    def __init__(self):
+        import psycopg2
+        self.conn = psycopg2.connect("postgresql://localhost/mydb")
+        self.cursor = self.conn.cursor()
+    def __call__(self, row):
+        self.cursor.execute("SELECT * FROM lookup WHERE id=%s", (row["id"],))
+        return {"id": row["id"], "result": self.cursor.fetchone()}
+ds = ds.map(DatabaseLookup, concurrency=4)`} language="python" filename="fix_database.py" />
+
+### Pattern 2: ML Model Loading
+
+<CodeBlock code={`# BROKEN: Model loaded in driver, captured by closure
+import torch
+model = torch.load("model.pt")
+model.eval()
+ds = ds.map_batches(lambda batch: {"pred": model(batch["input"])})
+# TypeError: cannot pickle 'torch.Tensor' object  (model weights)
+# FIXED: Model loaded per-worker
+class ModelPredictor:
+    def __init__(self):
+        import torch
+        self.model = torch.load("model.pt")
+        self.model.eval()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+    def __call__(self, batch):
+        import torch
+        with torch.no_grad():
+            inputs = torch.tensor(batch["input"]).to(self.device)
+            preds = self.model(inputs).cpu().numpy()
+        return {"pred": preds}
+ds = ds.map_batches(ModelPredictor, concurrency=2, num_gpus=1, batch_size=256)`} language="python" filename="fix_model.py" />
+
+### Pattern 3: File Handles and Clients
+
+<CodeBlock code={`# BROKEN: HTTP client created in driver
+import httpx
+client = httpx.Client(timeout=30)
+ds = ds.map(lambda row: {"response": client.get(row["url"]).text})
+# TypeError: cannot pickle '_thread.lock' object (from httpx connection pool)
+# FIXED: Client created per-worker
+class HttpFetcher:
+    def __init__(self):
+        import httpx
+        self.client = httpx.Client(timeout=30)
+    def __call__(self, row):
+        response = self.client.get(row["url"])
+        return {"url": row["url"], "response": response.text, "status": response.status_code}
+ds = ds.map(HttpFetcher, concurrency=8)`} language="python" filename="fix_http_client.py" />
+
+---
+
+## ray.put() for Large Shared Objects
+
+When you have a large **read-only** object (like a lookup table or model weights) that all workers need, use `ray.put()` to store it once in the object store. Without it, the object gets serialized separately for every single task.
+
+<MermaidDiagram chart={`flowchart LR
+    subgraph "Without ray.put()"
+        D1[Driver] -->|"pickle 500 MB"| W1a[Worker 1]
+        D1 -->|"pickle 500 MB"| W2a[Worker 2]
+        D1 -->|"pickle 500 MB"| W3a[Worker 3]
+        D1 -->|"pickle 500 MB"| W4a[Worker 4]
+    end
+    style D1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style W1a fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W2a fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W3a fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W4a fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+<MermaidDiagram chart={`flowchart LR
+    subgraph "With ray.put()"
+        D2[Driver] -->|"put once"| OS[Object Store\n500 MB]
+        OS -->|"zero-copy read"| W1b[Worker 1]
+        OS -->|"zero-copy read"| W2b[Worker 2]
+        OS -->|"zero-copy read"| W3b[Worker 3]
+        OS -->|"zero-copy read"| W4b[Worker 4]
+    end
+    style D2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style W1b fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W2b fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W3b fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W4b fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+<CodeBlock code={`import ray
+import numpy as np
+# A large lookup table that every worker needs
+lookup_table = np.load("embeddings_500mb.npy")  # 500 MB
+# BAD: lookup_table is serialized for every single task
+ds = ds.map(lambda row: {
+    "embedding": lookup_table[row["id"]]
+})
+# GOOD: Store once in object store, workers read with zero-copy
+lookup_ref = ray.put(lookup_table)
+def enrich_with_embedding(row, lookup=lookup_ref):
+    table = ray.get(lookup)  # zero-copy on same node
+    return {"id": row["id"], "embedding": table[row["id"]]}
+ds = ds.map(enrich_with_embedding)`} language="python" filename="ray_put_example.py" />
+
+---
+
+## Custom Serializers
+
+For objects with known serialization patterns, you can register custom serializers so Ray knows how to handle them:
+
+<CodeBlock code={`import ray
+import numpy as np
+# Example: Register a custom serializer for a specific class
+class GPUModel:
+    def __init__(self, weights):
+        self.weights = weights  # numpy array
+        self._gpu_handle = None  # unpicklable GPU resource
+    def to_serializable(self):
+        return {"weights": self.weights}
+    @classmethod
+    def from_serializable(cls, data):
+        return cls(data["weights"])
+# Register the custom serializer
+ray.util.register_custom_serializer(
+    GPUModel,
+    serializer=lambda obj: obj.to_serializable(),
+    deserializer=lambda data: GPUModel.from_serializable(data),
+)`} language="python" filename="custom_serializer.py" />
+
+---
+
+## ActorPoolStrategy for Stateful Transforms
+
+When your transform has expensive initialization (loading a model, opening a connection), use a class-based transform with `concurrency`. This creates **persistent actor workers** that initialize once and handle many batches.
+
+<CodeBlock code={`import ray
+# The class __init__ runs ONCE per actor, not once per batch
+class ExpensiveTransform:
+    def __init__(self):
+        # This runs once when the actor starts
+        import torch
+        print("Loading 5 GB model... (happens once per worker)")
+        self.model = torch.load("large_model.pt")
+        self.model.eval()
+        self.tokenizer = load_tokenizer("tokenizer/")
+        print("Model loaded!")
+    def __call__(self, batch):
+        # This runs for every batch — model is already loaded
+        tokens = self.tokenizer(batch["text"])
+        predictions = self.model(tokens)
+        return {"text": batch["text"], "prediction": predictions}
+ds = ray.data.read_parquet("data/")
+ds = ds.map_batches(
+    ExpensiveTransform,
+    concurrency=4,    # 4 persistent actors, each loads model once
+    batch_size=256,
+    num_gpus=1,       # each actor gets 1 GPU
+)`} language="python" filename="actor_pool.py" />
+
+<MermaidDiagram chart={`flowchart TD
+    subgraph "Actor Pool (concurrency=4)"
+        A1["Actor 1\n__init__: load model\n__call__: batch 1, 5, 9..."]
+        A2["Actor 2\n__init__: load model\n__call__: batch 2, 6, 10..."]
+        A3["Actor 3\n__init__: load model\n__call__: batch 3, 7, 11..."]
+        A4["Actor 4\n__init__: load model\n__call__: batch 4, 8, 12..."]
+    end
+    DS[Dataset\n12 batches] --> A1
+    DS --> A2
+    DS --> A3
+    DS --> A4
+    A1 --> OUT[Output Dataset]
+    A2 --> OUT
+    A3 --> OUT
+    A4 --> OUT
+    style DS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
+    style A1 fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style A2 fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style A3 fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style A4 fill:#b794f4,stroke:#b794f4,color:#1a1d27
+`} />
+
+---
+
+## Serialization Decision Tree
+
+Use this flowchart when you hit a serialization error:
+
+<MermaidDiagram chart={`flowchart TD
+    A["TypeError: cannot pickle"] --> B{What is unpicklable?}
+    B -->|"Connection / Handle\n(DB, HTTP, file)"| C[Use class-based transform\ncreate resource in __init__]
+    B -->|"Large read-only data\n(lookup table, config)"| D["Use ray.put() to store\nin object store once"]
+    B -->|"ML Model"| E{Need GPU?}
+    E -->|Yes| F["Class-based transform\nwith num_gpus=1"]
+    E -->|No| G["Class-based transform\nwith concurrency=N"]
+    B -->|"Lambda closure"| H[Replace with named function\nor class-based transform]
+    style A fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style D fill:#68d391,stroke:#68d391,color:#1a1d27
+    style F fill:#68d391,stroke:#68d391,color:#1a1d27
+    style G fill:#68d391,stroke:#68d391,color:#1a1d27
+    style H fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />

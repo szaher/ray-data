@@ -1,0 +1,113 @@
+---
+title: "Ray Data + Ray Train"
+quiz:
+  - question: "What does get_dataset_shard('train') do inside a Ray Train worker?"
+    options:
+      - "Downloads the dataset from cloud storage"
+      - "Returns the portion of the training data assigned to this specific worker"
+      - "Splits the dataset by feature columns"
+      - "Converts the dataset to a PyTorch tensor"
+    correctIndex: 1
+    explanation: "get_dataset_shard returns the shard (partition) of the dataset assigned to this particular training worker. Ray Train automatically splits the dataset across workers for data-parallel training."
+  - question: "Why is Ray Data preferred over a standalone DataLoader for distributed training?"
+    options:
+      - "It supports more file formats"
+      - "Preprocessing is distributed across the cluster, not bottlenecked on training workers"
+      - "It is the only way to use GPUs"
+      - "It automatically tunes hyperparameters"
+    correctIndex: 1
+    explanation: "Ray Data offloads preprocessing to dedicated CPU workers across the cluster. This keeps GPU training workers fully utilized rather than spending cycles on data loading and transformation."
+---
+
+## The Data Loading Bottleneck
+
+In distributed training, each GPU worker needs a continuous stream of preprocessed batches. If data loading is slow, **GPUs sit idle**. Ray Data solves this by running preprocessing on separate CPU workers and streaming results to trainers.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Ray Data (CPU workers)"
+    R[Read] --> P[Preprocess]
+    end
+    subgraph "Ray Train (GPU workers)"
+    P -->|stream shard 1| W1["Worker 1\nGPU 0"]
+    P -->|stream shard 2| W2["Worker 2\nGPU 1"]
+    P -->|stream shard 3| W3["Worker 3\nGPU 2"]
+    end
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style W1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W3 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Passing Datasets to a Trainer
+
+You create your Ray Dataset outside the trainer, then pass it via the `datasets` argument. Ray Train handles sharding automatically.
+
+<CodeBlock language="python" code={`import ray
+from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
+
+# 1. Create and preprocess the dataset
+train_ds = ray.data.read_parquet("s3://bucket/train/")
+train_ds = train_ds.map_batches(normalize_features, batch_size=4096)
+
+val_ds = ray.data.read_parquet("s3://bucket/val/")
+
+# 2. Pass datasets to the trainer
+trainer = TorchTrainer(
+    train_loop_per_worker=train_fn,
+    datasets={"train": train_ds, "val": val_ds},
+    scaling_config=ScalingConfig(
+        num_workers=4,
+        use_gpu=True,
+    ),
+)
+result = trainer.fit()`} />
+
+## The Training Function
+
+Inside each worker, `get_dataset_shard` gives you that worker's portion of the data. Use `iter_torch_batches` to get PyTorch tensors directly.
+
+<CodeBlock language="python" code={`import ray.train
+from ray.train import report
+
+def train_fn(config):
+    model = build_model().cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    # Each worker gets its own shard automatically
+    train_shard = ray.train.get_dataset_shard("train")
+
+    for epoch in range(config.get("epochs", 10)):
+        for batch in train_shard.iter_torch_batches(
+            batch_size=256,
+            dtypes=torch.float32,
+        ):
+            features = batch["features"].cuda()
+            labels = batch["labels"].cuda()
+
+            loss = train_step(model, optimizer, features, labels)
+
+        report({"loss": loss.item(), "epoch": epoch})`} />
+
+## Data Flow: End to End
+
+<MermaidDiagram chart={`graph TD
+    S3["S3 / Parquet Files"] --> RD["ray.data.read_parquet()"]
+    RD --> PP["map_batches(preprocess)"]
+    PP --> TR["TorchTrainer(datasets=...)"]
+    TR --> SH1["get_dataset_shard\nWorker 1"]
+    TR --> SH2["get_dataset_shard\nWorker 2"]
+    SH1 --> IT1["iter_torch_batches()"]
+    SH2 --> IT2["iter_torch_batches()"]
+    IT1 --> GPU1["Training on GPU 0"]
+    IT2 --> GPU2["Training on GPU 1"]
+    style S3 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
+    style RD fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PP fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style TR fill:#68d391,stroke:#68d391,color:#1a1d27
+    style GPU1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style GPU2 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+**Key insight:** Preprocessing runs on CPU workers in the Ray cluster, while training runs on GPU workers. The two pipelines overlap via streaming, keeping GPUs fed without idle time.

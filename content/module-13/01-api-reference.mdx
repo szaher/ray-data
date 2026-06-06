@@ -1,0 +1,292 @@
+---
+title: "Ray Data API Cheat Sheet"
+quiz: []
+---
+
+## Reading Data
+
+Load data from files, databases, and in-memory structures into a `ray.data.Dataset`.
+
+### From Files
+
+| API | Description |
+|-----|-------------|
+| `read_csv(paths)` | Read CSV files or directories of CSVs |
+| `read_parquet(paths)` | Read Parquet files (columnar, efficient) |
+| `read_json(paths)` | Read JSON or JSONL files |
+| `read_text(paths)` | Read text files, one row per line |
+| `read_binary_files(paths)` | Read raw binary files (images, PDFs) |
+
+<CodeBlock language="python" filename="read_files.py" code={`import ray
+ds = ray.data.read_csv("s3://bucket/data/")
+ds = ray.data.read_parquet("data/*.parquet")
+ds = ray.data.read_json("/path/to/records.jsonl")
+ds = ray.data.read_text("logs/*.txt")
+ds = ray.data.read_binary_files("images/", include_paths=True)
+`} />
+
+### From Databases & Table Formats
+
+| API | Description |
+|-----|-------------|
+| `read_sql(sql, conn)` | Read from any SQLAlchemy-compatible database |
+| `read_mongo(uri, db, collection)` | Read from MongoDB |
+| `read_delta(uri)` | Read Delta Lake tables |
+| `read_iceberg(table)` | Read Apache Iceberg tables |
+
+<CodeBlock language="python" filename="read_databases.py" code={`# SQL database
+ds = ray.data.read_sql(
+    "SELECT * FROM users WHERE active = true",
+    create_connection=lambda: sqlite3.connect("app.db"),
+)
+# Delta Lake
+ds = ray.data.read_delta("s3://lakehouse/events/")
+`} />
+
+### From In-Memory Data
+
+| API | Description |
+|-----|-------------|
+| `from_items(list)` | Create from a list of dicts |
+| `from_pandas(df)` | Create from a Pandas DataFrame |
+| `from_numpy(arr)` | Create from a NumPy array |
+| `from_arrow(table)` | Create from a PyArrow Table |
+| `range(n)` | Generate integers 0 to n-1 |
+| `range_tensor(n, shape)` | Generate tensor rows |
+
+<CodeBlock language="python" filename="from_memory.py" code={`# From Python dicts
+ds = ray.data.from_items([{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}])
+# From Pandas
+ds = ray.data.from_pandas(df)
+# From NumPy
+ds = ray.data.from_numpy(np.random.rand(1000, 4))
+# Generate sequences
+ds = ray.data.range(10000)
+ds = ray.data.range_tensor(100, shape=(64, 64, 3))
+`} />
+
+---
+
+## Transforming Data
+
+All transforms are **lazy** -- they execute only when you consume the data.
+
+### Row-Level Transforms
+
+| API | Description |
+|-----|-------------|
+| `ds.map(fn)` | Apply fn to each row, return one row |
+| `ds.flat_map(fn)` | Apply fn to each row, return zero or more rows |
+| `ds.filter(fn)` | Keep rows where fn returns True |
+
+<CodeBlock language="python" filename="row_transforms.py" code={`# Map: transform each row
+ds = ds.map(lambda row: {"text": row["text"].lower(), "len": len(row["text"])})
+# Flat map: one row in, many rows out
+ds = ds.flat_map(lambda row: [{"word": w} for w in row["text"].split()])
+# Filter: keep matching rows
+ds = ds.filter(lambda row: row["age"] >= 18)
+`} />
+
+### Batch Transforms
+
+| API | Description |
+|-----|-------------|
+| `ds.map_batches(fn)` | Apply fn to batches (default: PyArrow format) |
+| `ds.map_batches(fn, batch_format="pandas")` | Batches as Pandas DataFrames |
+| `ds.map_batches(fn, batch_format="numpy")` | Batches as dict of NumPy arrays |
+
+<CodeBlock language="python" filename="batch_transforms.py" code={`# Process batches as Pandas DataFrames
+def normalize(batch: pd.DataFrame) -> pd.DataFrame:
+    batch["score"] = (batch["score"] - batch["score"].mean()) / batch["score"].std()
+    return batch
+ds = ds.map_batches(normalize, batch_format="pandas")
+# Process batches as NumPy arrays
+def double(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    batch["value"] = batch["value"] * 2
+    return batch
+ds = ds.map_batches(double, batch_format="numpy")
+`} />
+
+### Column Operations
+
+| API | Description |
+|-----|-------------|
+| `ds.add_column(name, fn)` | Add a computed column |
+| `ds.drop_columns([cols])` | Remove columns |
+| `ds.rename_columns({old: new})` | Rename columns |
+| `ds.select_columns([cols])` | Keep only listed columns |
+
+<CodeBlock language="python" filename="column_ops.py" code={`ds = ds.add_column("full_name", lambda row: row["first"] + " " + row["last"])
+ds = ds.drop_columns(["temp_id", "debug_flag"])
+ds = ds.rename_columns({"old_name": "new_name"})
+ds = ds.select_columns(["id", "name", "score"])
+`} />
+
+### Ordering & Partitioning
+
+| API | Description |
+|-----|-------------|
+| `ds.limit(n)` | Take first n rows |
+| `ds.random_shuffle()` | Randomly shuffle all rows |
+| `ds.sort(key)` | Sort by column |
+| `ds.repartition(n)` | Reorganize into n blocks |
+
+<CodeBlock language="python" filename="ordering.py" code={`ds = ds.sort("timestamp")
+ds = ds.random_shuffle(seed=42)
+ds = ds.limit(1000)
+ds = ds.repartition(64)  # Rebalance into 64 blocks
+`} />
+
+### Aggregations
+
+| API | Description |
+|-----|-------------|
+| `ds.groupby(key).count()` | Count rows per group |
+| `ds.groupby(key).sum(col)` | Sum a column per group |
+| `ds.groupby(key).mean(col)` | Mean per group |
+| `ds.groupby(key).min(col)` | Min per group |
+| `ds.groupby(key).max(col)` | Max per group |
+| `ds.groupby(key).map_groups(fn)` | Custom aggregation per group |
+
+<CodeBlock language="python" filename="aggregations.py" code={`# Built-in aggregations
+counts = ds.groupby("category").count()
+avg_price = ds.groupby("region").mean("price")
+# Custom group processing
+def top_n(group: pd.DataFrame) -> pd.DataFrame:
+    return group.nlargest(5, "score")
+ds = ds.groupby("category").map_groups(top_n, batch_format="pandas")
+`} />
+
+### Combining Datasets
+
+| API | Description |
+|-----|-------------|
+| `ds.zip(other_ds)` | Column-wise join (must have same row count) |
+| `ds.union(other_ds)` | Row-wise concatenation |
+
+<CodeBlock language="python" filename="combining.py" code={`# Zip: combine columns from two datasets
+features = ray.data.read_parquet("features.parquet")
+labels = ray.data.read_parquet("labels.parquet")
+combined = features.zip(labels)
+# Union: stack rows
+train = ds1.union(ds2).union(ds3)
+`} />
+
+---
+
+## Consuming & Writing Data
+
+### Inspecting Data
+
+| API | Description |
+|-----|-------------|
+| `ds.show(n)` | Print first n rows |
+| `ds.take(n)` | Return first n rows as list of dicts |
+| `ds.take_all()` | Return all rows as list of dicts |
+| `ds.count()` | Return total row count |
+| `ds.schema()` | Return the Arrow schema |
+| `ds.columns()` | Return column names |
+| `ds.num_blocks()` | Return number of blocks |
+
+<CodeBlock language="python" filename="inspecting.py" code={`ds.show(5)                 # Pretty-print first 5 rows
+rows = ds.take(10)         # List of 10 dicts
+total = ds.count()         # Total number of rows
+print(ds.schema())         # Column names and types
+print(ds.columns())        # ['id', 'name', 'score']
+print(ds.num_blocks())     # Number of data blocks
+`} />
+
+### Iterating
+
+| API | Description |
+|-----|-------------|
+| `ds.iter_rows()` | Iterate row by row (dicts) |
+| `ds.iter_batches(batch_size=N)` | Iterate in batches |
+| `ds.iter_torch_batches(batch_size=N)` | Iterate as PyTorch tensors |
+| `ds.iter_tf_batches(batch_size=N)` | Iterate as TensorFlow tensors |
+
+<CodeBlock language="python" filename="iterating.py" code={`# Row-by-row
+for row in ds.iter_rows():
+    process(row["text"])
+# Batched (Pandas DataFrames by default)
+for batch in ds.iter_batches(batch_size=256):
+    process_batch(batch)
+# PyTorch training loop
+for batch in ds.iter_torch_batches(batch_size=32, dtypes=torch.float32):
+    logits = model(batch["features"])
+`} />
+
+### Converting to Other Formats
+
+| API | Description |
+|-----|-------------|
+| `ds.to_pandas()` | Collect entire dataset as a Pandas DataFrame |
+| `ds.to_arrow()` | Collect as a PyArrow Table |
+
+<CodeBlock language="python" filename="converting.py" code={`df = ds.to_pandas()        # Pandas DataFrame (loads all into memory)
+table = ds.to_arrow()      # PyArrow Table
+`} />
+
+### Writing to Storage
+
+| API | Description |
+|-----|-------------|
+| `ds.write_parquet(path)` | Write as Parquet files |
+| `ds.write_csv(path)` | Write as CSV files |
+| `ds.write_json(path)` | Write as JSON files |
+| `ds.write_delta(path)` | Write as Delta Lake table |
+
+<CodeBlock language="python" filename="writing.py" code={`ds.write_parquet("s3://bucket/output/")
+ds.write_csv("/local/output/", num_rows_per_file=100_000)
+ds.write_json("output/", num_rows_per_file=50_000)
+ds.write_delta("s3://lakehouse/processed/")
+`} />
+
+---
+
+## Execution Control
+
+### Materialization & Stats
+
+| API | Description |
+|-----|-------------|
+| `ds.materialize()` | Force execution and cache results in object store |
+| `ds.stats()` | Return execution statistics as a string |
+
+<CodeBlock language="python" filename="execution.py" code={`# Force execution (useful before branching a pipeline)
+ds = ds.materialize()
+# Check execution stats after consuming data
+ds.show(5)
+print(ds.stats())
+`} />
+
+### DataContext Configuration
+
+| API | Description |
+|-----|-------------|
+| `DataContext.get_current()` | Get the current execution context |
+| `ctx.execution_options` | Access execution options |
+| `ctx.target_max_block_size` | Max bytes per block (default ~512 MiB) |
+
+<CodeBlock language="python" filename="data_context.py" code={`from ray.data import DataContext
+ctx = DataContext.get_current()
+# Adjust block size for memory-constrained environments
+ctx.target_max_block_size = 128 * 1024 * 1024  # 128 MiB
+# Set execution options
+ctx.execution_options.resource_limits.object_store_memory = 2e9
+ctx.execution_options.preserve_order = True
+`} />
+
+### Splitting Datasets
+
+| API | Description |
+|-----|-------------|
+| `ds.train_test_split(test_size=0.2)` | Split into train and test sets |
+| `ds.split(n)` | Split into n disjoint pieces |
+| `ds.streaming_split(n)` | Split for parallel streaming consumers |
+
+<CodeBlock language="python" filename="splitting.py" code={`# Train/test split
+train_ds, test_ds = ds.train_test_split(test_size=0.2, seed=42)
+# Split for distributed training (one split per worker)
+shards = ds.split(n=4, equal=True)
+`} />

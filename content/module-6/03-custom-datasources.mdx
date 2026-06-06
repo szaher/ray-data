@@ -1,0 +1,130 @@
+---
+title: "Custom Datasources"
+quiz:
+  - question: "What must a custom Ray Data Datasource implement to support reading?"
+    options:
+      - "A read() method that returns a single DataFrame"
+      - "A get_read_tasks() method returning a list of ReadTask objects and an estimate of in-memory size"
+      - "A create_reader() method that returns an Iterator"
+      - "An __iter__() method yielding rows"
+    correctIndex: 1
+    explanation: "A custom Datasource for reading must implement get_read_tasks(), which returns a list of ReadTask objects. Each ReadTask is a callable that produces blocks of data, plus metadata estimating the in-memory size."
+  - question: "Why does Ray Data require ReadTask to include a metadata estimate of block size?"
+    options:
+      - "For display purposes in the dashboard only"
+      - "To validate that files are not corrupt"
+      - "So the scheduler can plan memory usage and apply backpressure before reading begins"
+      - "To decide which file format to use internally"
+    correctIndex: 2
+    explanation: "The metadata size estimate lets Ray Data's memory-aware scheduler plan ahead — it uses these estimates for backpressure decisions and resource allocation before any data is actually read."
+---
+
+## When You Need a Custom Datasource
+
+Ray Data has built-in connectors for Parquet, CSV, JSON, images, and more. But when your data lives in a proprietary system — a custom database, a message queue, or an internal API — you need to implement your own `Datasource`.
+
+<MermaidDiagram chart={`graph TD
+    A["Your Custom Datasource"] --> B["get_read_tasks()"]
+    B --> T1["ReadTask 1\n(partition A)"]
+    B --> T2["ReadTask 2\n(partition B)"]
+    B --> T3["ReadTask 3\n(partition C)"]
+    T1 --> BLK["Blocks → Dataset"]
+    T2 --> BLK
+    T3 --> BLK
+    A --> W["do_write()"]
+    W --> W1["Write Task 1"]
+    W --> W2["Write Task 2"]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style BLK fill:#68d391,stroke:#68d391,color:#1a1d27
+    style W fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Implementing a Read Datasource
+
+The core interface requires implementing `get_read_tasks()`, which returns a list of `ReadTask` objects. Each `ReadTask` is a zero-argument callable that produces an iterator of Arrow tables or pandas DataFrames.
+
+<CodeBlock language="python" code={`import ray
+from ray.data.datasource import Datasource, ReadTask
+from ray.data.block import BlockMetadata
+import pyarrow as pa
+
+class MyAPIDatasource(Datasource):
+    def __init__(self, base_url: str, partitions: int = 4):
+        self.base_url = base_url
+        self.partitions = partitions
+
+    def get_read_tasks(self, parallelism: int) -> list[ReadTask]:
+        tasks = []
+        for i in range(self.partitions):
+            # Metadata helps the scheduler plan memory
+            metadata = BlockMetadata(
+                num_rows=1000,                  # estimated
+                size_bytes=1000 * 256,          # estimated bytes
+                schema=pa.schema([
+                    ("id", pa.int64()),
+                    ("value", pa.float64()),
+                ]),
+                input_files=None,
+                exec_stats=None,
+            )
+            # Capture loop variable
+            url = f"{self.base_url}/partition/{i}"
+            read_fn = self._make_read_fn(url)
+            tasks.append(ReadTask(read_fn, metadata))
+        return tasks
+
+    def _make_read_fn(self, url):
+        def read() -> iter:
+            import requests
+            resp = requests.get(url).json()
+            table = pa.table({
+                "id": [r["id"] for r in resp],
+                "value": [r["value"] for r in resp],
+            })
+            return [table]   # Return list of Arrow tables
+        return read`} />
+
+## Using Your Custom Datasource
+
+<CodeBlock language="python" code={`# Read from your custom source
+ds = ray.data.read_datasource(
+    MyAPIDatasource(base_url="https://api.example.com", partitions=8)
+)
+
+# Use it like any other Dataset
+ds = ds.filter(lambda row: row["value"] > 0.5)
+print(ds.take(5))`} />
+
+## Implementing a Write Datasource
+
+To support writing, override `do_write()`. Ray Data calls this with blocks of data to persist.
+
+<CodeBlock language="python" code={`class MyAPIWriteDatasource(Datasource):
+    def __init__(self, endpoint: str):
+        self.endpoint = endpoint
+
+    def do_write(self, blocks, metadata, ray_remote_args,
+                 write_args) -> list:
+        import requests
+
+        def write_block(block: pa.Table):
+            payload = block.to_pydict()
+            requests.post(self.endpoint, json=payload)
+
+        # Write each block in parallel via Ray tasks
+        write_tasks = [
+            ray.remote(write_block).remote(block)
+            for block in blocks
+        ]
+        ray.get(write_tasks)
+        return []
+
+# Write a dataset to your custom sink
+ds.write_datasource(MyAPIWriteDatasource("https://api.example.com/ingest"))`} />
+
+## Key Design Considerations
+
+- **Partition wisely** — return one `ReadTask` per natural data partition (files, shards, API pages). More tasks means more parallelism.
+- **Estimate metadata accurately** — bad size estimates lead to poor backpressure decisions, causing spilling or underutilization.
+- **Return Arrow tables** — they integrate most efficiently with Ray Data's block format and avoid extra serialization.
+- **Handle retries in your read function** — each `ReadTask` callable may be re-executed on failure, so make reads idempotent.

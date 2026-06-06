@@ -1,0 +1,301 @@
+---
+title: "Configuration & Tuning Reference"
+quiz: []
+---
+
+## Overview
+
+Ray Data has sensible defaults for most workloads, but when you need to optimize memory usage, throughput, or latency, these are the knobs to turn. Each setting includes its default, what it controls, and when to change it.
+
+---
+
+## Parallelism & Concurrency
+
+### ray.init() Resource Declaration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `num_cpus` | Auto-detected | Number of CPUs available to Ray on this node |
+| `num_gpus` | Auto-detected | Number of GPUs available to Ray on this node |
+| `object_store_memory` | 30% of RAM | Bytes reserved for the object store (shared memory) |
+
+<CodeBlock language="python" filename="ray_init_resources.py" code={`import ray
+# Development: limit resources to avoid starving your system
+ray.init(num_cpus=4, num_gpus=1)
+# Production: explicit memory allocation
+ray.init(
+    num_cpus=32,
+    num_gpus=4,
+    object_store_memory=20 * 1024**3,  # 20 GiB
+)
+`} />
+
+**When to change:** Set `num_cpus` lower during development to leave cores free for other work. Increase `object_store_memory` when your pipeline shuffles large intermediate datasets.
+
+### override_num_blocks in Readers
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `override_num_blocks` | Auto (based on file count and size) | Number of output blocks from a read operation |
+
+<CodeBlock language="python" filename="override_blocks.py" code={`# Default: Ray picks block count based on file count and data size
+ds = ray.data.read_parquet("data/")
+# Override: force more blocks for finer-grained parallelism
+ds = ray.data.read_parquet("data/", override_num_blocks=128)
+# Override: fewer blocks to reduce scheduling overhead on small data
+ds = ray.data.read_parquet("small_data/", override_num_blocks=4)
+`} />
+
+**When to change:** Increase when you have a few large files and want more parallelism. Decrease when you have many tiny files and scheduling overhead dominates.
+
+### concurrency in map_batches
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `concurrency` | Auto (one task per available CPU) | Max number of concurrent map workers |
+
+<CodeBlock language="python" filename="concurrency.py" code={`# Default: Ray decides based on available resources
+ds = ds.map_batches(transform_fn)
+# Fixed concurrency: exactly 8 workers
+ds = ds.map_batches(transform_fn, concurrency=8)
+# Range: between 2 and 16 workers, Ray auto-scales within range
+ds = ds.map_batches(transform_fn, concurrency=(2, 16))
+`} />
+
+**When to change:** Set a fixed number when your transform has specific resource requirements (e.g., each worker loads a model into memory). Use a range to let Ray auto-scale based on available resources.
+
+---
+
+## Memory Management
+
+### ctx.target_max_block_size
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `target_max_block_size` | ~512 MiB | Target upper bound for block size in bytes |
+
+<CodeBlock language="python" filename="block_size.py" code={`from ray.data import DataContext
+ctx = DataContext.get_current()
+# Reduce for memory-constrained environments
+ctx.target_max_block_size = 64 * 1024 * 1024    # 64 MiB
+# Increase for throughput on high-memory machines
+ctx.target_max_block_size = 1024 * 1024 * 1024   # 1 GiB
+`} />
+
+**When to change:** Decrease when you hit out-of-memory errors. Smaller blocks use less memory per task but increase scheduling overhead. Increase when you have plenty of RAM and want fewer, larger tasks for better throughput.
+
+### batch_size in map_batches
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `batch_size` | `4096` | Number of rows per batch passed to your function |
+
+<CodeBlock language="python" filename="batch_size.py" code={`# Smaller batches: less memory per call, more overhead
+ds = ds.map_batches(fn, batch_size=256)
+# Larger batches: more memory per call, better vectorization
+ds = ds.map_batches(fn, batch_size=8192)
+# GPU inference: match your model's optimal batch size
+ds = ds.map_batches(ModelClass, batch_size=32, num_gpus=1)
+`} />
+
+**When to change:** Increase for vectorized operations (NumPy, Pandas) to amortize per-batch overhead. Decrease for memory-heavy transforms where each row is large (images, embeddings). For GPU inference, match the model's optimal throughput batch size.
+
+### Object Store Memory Limits
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `resource_limits.object_store_memory` | Unlimited | Cap on object store usage for a pipeline |
+
+<CodeBlock language="python" filename="object_store_limit.py" code={`from ray.data import DataContext
+ctx = DataContext.get_current()
+# Cap pipeline's object store usage to 4 GiB
+ctx.execution_options.resource_limits.object_store_memory = 4e9
+`} />
+
+**When to change:** Set this when running multiple pipelines concurrently or when you need to guarantee that a pipeline does not consume all available object store memory. The pipeline will apply backpressure (slow down producers) when the limit is reached.
+
+---
+
+## Execution Options
+
+### preserve_order
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `preserve_order` | `False` | Whether output order matches input order |
+
+<CodeBlock language="python" filename="preserve_order.py" code={`from ray.data import DataContext
+ctx = DataContext.get_current()
+# Enable when output ordering matters
+ctx.execution_options.preserve_order = True
+ds = ray.data.read_parquet("sorted_data.parquet")
+ds = ds.map_batches(transform_fn)
+# Results come out in the same order as the input
+for batch in ds.iter_batches():
+    process_in_order(batch)
+`} />
+
+**When to change:** Enable when you need deterministic output ordering (e.g., writing sorted results, generating line-aligned predictions). Keeping it `False` (default) allows Ray to return results as they finish, which is faster.
+
+### locality_with_output
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `locality_with_output` | `False` | Prefer scheduling tasks on nodes that will consume the output |
+
+<CodeBlock language="python" filename="locality.py" code={`from ray.data import DataContext
+ctx = DataContext.get_current()
+ctx.execution_options.locality_with_output = True
+`} />
+
+**When to change:** Enable in multi-node clusters when downstream consumers (e.g., training actors) are pinned to specific nodes. Reduces data transfer across the network.
+
+---
+
+## Performance Tuning
+
+### batch_format Selection
+
+| Format | Type Received | Best For |
+|--------|--------------|----------|
+| `"pandas"` | `pd.DataFrame` | String ops, merges, complex transforms |
+| `"numpy"` | `dict[str, np.ndarray]` | Numerical ops, ML feature engineering |
+| `"pyarrow"` | `pa.Table` | Zero-copy reads, minimal transforms |
+
+<CodeBlock language="python" filename="batch_format.py" code={`# Pandas: convenient for complex data manipulation
+ds.map_batches(fn, batch_format="pandas")
+# NumPy: fastest for numerical computation
+ds.map_batches(fn, batch_format="numpy")
+# PyArrow: minimal overhead when you need Arrow-native operations
+ds.map_batches(fn, batch_format="pyarrow")
+`} />
+
+**When to change:** Default is fine for most cases. Use `"numpy"` when doing pure numerical work to avoid DataFrame overhead. Use `"pyarrow"` when your transform is simple and you want to avoid conversion costs.
+
+### zero_copy_batch
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `zero_copy_batch` | `False` | Avoid copying data when creating batches |
+
+<CodeBlock language="python" filename="zero_copy.py" code={`# Enable for read-only transforms to avoid memory copies
+ds.map_batches(
+    read_only_fn,
+    batch_format="numpy",
+    zero_copy_batch=True,
+)
+`} />
+
+**When to change:** Enable when your transform only reads batch data without modifying it in place. Saves memory and time by avoiding a copy. Do not enable if your function mutates the batch -- it will corrupt shared memory.
+
+### ActorPoolStrategy for Stateful Transforms
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `compute` | Task pool (stateless) | Execution strategy for map_batches |
+| `ActorPoolStrategy(size=N)` | N/A | Use N long-lived actor workers |
+| `ActorPoolStrategy(min_size=M, max_size=N)` | N/A | Auto-scale between M and N actors |
+
+<CodeBlock language="python" filename="actor_pool.py" code={`from ray.data import ActorPoolStrategy
+# Fixed pool: 4 actors, each loads a model once
+ds = ds.map_batches(
+    ModelClass,
+    compute=ActorPoolStrategy(size=4),
+    num_gpus=1,
+    batch_size=64,
+)
+# Auto-scaling pool: between 2 and 8 actors
+ds = ds.map_batches(
+    ModelClass,
+    compute=ActorPoolStrategy(min_size=2, max_size=8),
+    num_gpus=1,
+    batch_size=64,
+)
+`} />
+
+**When to change:** Use `ActorPoolStrategy` whenever your transform has expensive initialization (loading ML models, opening database connections, compiling JIT code). Without it, each task re-initializes from scratch.
+
+### Resource Requests per Task
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `num_cpus` | `1` | CPUs per map task or actor |
+| `num_gpus` | `0` | GPUs per map task or actor |
+
+<CodeBlock language="python" filename="resource_requests.py" code={`# CPU-intensive transform: request 4 CPUs per worker
+ds = ds.map_batches(heavy_cpu_fn, num_cpus=4)
+# GPU inference: 1 GPU per actor
+ds = ds.map_batches(
+    GpuModel,
+    compute=ActorPoolStrategy(size=2),
+    num_gpus=1,
+)
+# Multi-GPU model: 2 GPUs per actor
+ds = ds.map_batches(
+    LargeModel,
+    compute=ActorPoolStrategy(size=1),
+    num_gpus=2,
+)
+`} />
+
+**When to change:** Set `num_cpus` higher than 1 when your function uses internal parallelism (e.g., OpenMP, multi-threaded libraries). Set `num_gpus` to match what your model actually needs.
+
+---
+
+## Quick Tuning Decision Table
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `OutOfMemoryError` | Blocks too large | Decrease `target_max_block_size` or `batch_size` |
+| Slow with many small files | Scheduling overhead | Decrease `override_num_blocks`, increase `batch_size` |
+| Low GPU utilization | Batch size too small | Increase `batch_size` in `map_batches` |
+| High memory on shuffle/sort | Too many blocks in memory | Set `resource_limits.object_store_memory` |
+| Slow model inference | Model reloaded per task | Use `ActorPoolStrategy` |
+| Output order scrambled | Default unordered execution | Set `preserve_order = True` |
+| Cross-node data transfer | No locality awareness | Set `locality_with_output = True` |
+| Slow Pandas transforms | DataFrame conversion overhead | Try `batch_format="numpy"` or `"pyarrow"` |
+
+---
+
+## Full Configuration Example
+
+A production pipeline with all major tuning knobs set explicitly:
+
+<CodeBlock language="python" filename="full_tuned_pipeline.py" code={`import ray
+from ray.data import DataContext, ActorPoolStrategy
+# 1. Initialize Ray with explicit resources
+ray.init(num_cpus=32, num_gpus=4, object_store_memory=30 * 1024**3)
+# 2. Configure DataContext
+ctx = DataContext.get_current()
+ctx.target_max_block_size = 256 * 1024 * 1024  # 256 MiB blocks
+ctx.execution_options.resource_limits.object_store_memory = 20e9
+ctx.execution_options.preserve_order = False
+ctx.execution_options.locality_with_output = True
+# 3. Read with explicit parallelism
+ds = ray.data.read_parquet(
+    "s3://bucket/data/",
+    override_num_blocks=128,
+)
+# 4. Stateless transform: default task pool
+ds = ds.map_batches(
+    preprocess_fn,
+    batch_format="numpy",
+    batch_size=4096,
+    zero_copy_batch=True,
+    num_cpus=1,
+)
+# 5. Stateful transform: actor pool with GPUs
+ds = ds.map_batches(
+    ModelClass,
+    compute=ActorPoolStrategy(size=4),
+    batch_size=64,
+    num_gpus=1,
+    concurrency=4,
+)
+# 6. Write output
+ds.write_parquet(
+    "s3://bucket/results/",
+    num_rows_per_file=500_000,
+)
+print(ds.stats())
+`} />

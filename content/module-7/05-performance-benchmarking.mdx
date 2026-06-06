@@ -1,0 +1,99 @@
+---
+title: "Performance Benchmarking"
+quiz:
+  - question: "Which Ray Data method provides execution statistics like throughput and block counts?"
+    options:
+      - "ds.show()"
+      - "ds.stats()"
+      - "ds.explain()"
+      - "ds.profile()"
+    correctIndex: 1
+    explanation: "ds.stats() returns per-stage wall time, throughput (rows/sec, MB/sec), block counts, and memory usage — the primary tool for diagnosing bottlenecks."
+  - question: "What is the most common cause of low throughput in a mixed CPU-GPU pipeline?"
+    options:
+      - "The GPU is too fast"
+      - "A slow CPU stage starves the GPU of data, creating a pipeline bottleneck"
+      - "Ray Data does not support mixed pipelines"
+      - "Parquet files are too large to read"
+    correctIndex: 1
+    explanation: "In a streaming pipeline, the slowest stage limits overall throughput. If CPU preprocessing cannot feed batches fast enough, GPUs sit idle."
+---
+
+## Measuring What Matters
+
+Optimizing without measurement is guesswork. Ray Data provides built-in profiling tools.
+
+<MermaidDiagram chart={`graph LR
+    A[Baseline\nMeasure] --> B[Identify\nBottleneck]
+    B --> C[Tune\nParameters]
+    C --> D[Re-measure]
+    D -->|"Still slow?"| B
+    D -->|"Fast enough"| E[Ship It]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Profiling with ds.stats()
+
+<CodeBlock language="python" code={`import ray, time
+
+ds = ray.data.read_parquet("s3://data/events/", parallelism=200)
+ds = ds.map_batches(lambda b: b, batch_size=4096)
+
+start = time.perf_counter()
+result = ds.materialize()
+elapsed = time.perf_counter() - start
+
+print(f"Total: {elapsed:.1f}s")
+print(result.stats())
+# ReadParquet: 200 blocks, 12.3s, 450 MB/s
+# MapBatches: 200 blocks, 8.1s, 680 MB/s
+`} />
+
+## Benchmark Framework
+
+<CodeBlock language="python" code={`def benchmark(name, pipeline_fn, runs=3):
+    times = []
+    for _ in range(runs):
+        start = time.perf_counter()
+        pipeline_fn().materialize()
+        times.append(time.perf_counter() - start)
+    avg, best = sum(times) / len(times), min(times)
+    print(f"{name}: avg={avg:.1f}s best={best:.1f}s")
+
+for bs in [1024, 4096, 8192]:
+    benchmark(f"batch_size={bs}",
+              lambda bs=bs: ray.data.read_parquet("s3://data/events/")
+                  .map_batches(lambda b: b, batch_size=bs))
+`} />
+
+## Tuning Parameters
+
+<MermaidDiagram chart={`graph TD
+    A["batch_size\n1K-64K"] --> T[Throughput]
+    B["concurrency\n1-N actors"] --> T
+    C["parallelism\nread splits"] --> T
+    D["num_cpus / num_gpus"] --> T
+    T --> M["ds.stats()"]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style C fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style T fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style M fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## When to Use Ray Data vs Alternatives
+
+**Ray Data wins** at GPU-heavy ML pipelines and mixed CPU/GPU workloads (streaming by default, native GPU actors, Arrow zero-copy). **Spark wins** at SQL-heavy analytics and large shuffle joins.
+
+## Common Bottleneck Fixes
+
+1. **Slow reads** — increase `parallelism` to create more blocks
+2. **CPU starvation** — increase `concurrency` or optimize the transform
+3. **GPU idle** — upstream CPU too slow; add CPU workers
+4. **OOM** — reduce `batch_size` or lower `target_max_block_size`
+
+Always start with `ds.stats()`, find the slowest operator, and tune that stage first.

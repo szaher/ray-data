@@ -1,0 +1,207 @@
+---
+title: "Cloud Storage: S3, GCS & Azure"
+quiz:
+  - question: "How does Ray Data read Parquet files from S3 without explicit credential arguments?"
+    options:
+      - "It prompts the user for credentials at runtime"
+      - "It uses the default boto3 credential chain (env vars, IAM roles, ~/.aws/credentials)"
+      - "It only works with public buckets"
+      - "It requires a credentials JSON file passed to read_parquet()"
+    correctIndex: 1
+    explanation: "Ray Data delegates S3 access to PyArrow's S3 filesystem, which uses the standard boto3 credential chain — environment variables, IAM instance roles, or ~/.aws/credentials — without needing explicit arguments."
+  - question: "What is the primary benefit of using pyarrow.fs filesystem abstraction in Ray Data?"
+    options:
+      - "It encrypts all data in transit automatically"
+      - "It provides a unified API so the same code works across S3, GCS, and Azure with minimal changes"
+      - "It compresses files before uploading"
+      - "It caches all remote files locally for faster re-reads"
+    correctIndex: 1
+    explanation: "PyArrow's filesystem abstraction gives Ray Data a single interface for S3, GCS, Azure, and local filesystems. You swap the URI scheme and credentials while keeping the rest of your pipeline code identical."
+---
+
+## Reading Data from the Cloud
+
+Most production Ray Data pipelines read from cloud object stores. Ray Data uses **PyArrow's filesystem layer** under the hood, which means S3, GCS, and Azure Blob Storage all work through the same `read_*` APIs -- you just change the URI prefix.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Cloud Storage"
+        S3["AWS S3\ns3://bucket/path"]
+        GCS["Google GCS\ngs://bucket/path"]
+        AZ["Azure Blob\naz://container/path"]
+    end
+    subgraph "Ray Cluster"
+        D[Driver] --> W1[Worker 1]
+        D --> W2[Worker 2]
+        D --> W3[Worker 3]
+        D --> W4[Worker 4]
+    end
+    S3 --> W1
+    S3 --> W2
+    GCS --> W3
+    AZ --> W4
+    style S3 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style GCS fill:#68d391,stroke:#68d391,color:#1a1d27
+    style AZ fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style D fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W1 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style W2 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style W3 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W4 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+Each worker reads its assigned file partitions **directly** from the object store -- the driver only coordinates which files go where. This means read throughput scales linearly with the number of workers.
+
+## AWS S3
+
+S3 is the most common cloud storage backend. Ray Data picks up AWS credentials automatically from the standard boto3 chain.
+
+<CodeBlock language="python" code={`import ray
+# Reading Parquet from S3
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/data/events/")
+# Reading CSV
+ds_csv = ray.data.read_csv("s3://YOUR_BUCKET/logs/2024/")
+# Reading JSON lines
+ds_json = ray.data.read_json("s3://YOUR_BUCKET/raw/clicks.jsonl")
+print(ds.schema())
+print(f"Rows: {ds.count()}")`} language="python" filename="read_s3.py" />
+
+### Credential Configuration
+
+Ray Data inherits credentials from **PyArrow's S3 filesystem**, which follows the standard AWS credential resolution order:
+
+<CodeBlock language="python" code={`import pyarrow.fs as pafs
+import ray
+# Option 1: Environment variables (most common in production)
+# Export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY before running.
+# Option 2: Explicit credentials via PyArrow filesystem
+s3 = pafs.S3FileSystem(
+    access_key="YOUR_ACCESS_KEY",
+    secret_key="YOUR_SECRET_KEY",
+    region="us-east-1",
+    endpoint_override="https://s3.us-east-1.amazonaws.com",  # custom endpoint
+)
+ds = ray.data.read_parquet(
+    "YOUR_BUCKET/data/events/",
+    filesystem=s3,
+)
+# Option 3: IAM roles (EC2, EKS, ECS)
+# No code changes needed -- boto3 picks up the instance role automatically.
+# Just call ray.data.read_parquet("s3://...") directly.`} language="python" filename="s3_credentials.py" />
+
+For **custom S3-compatible endpoints** (MinIO, Ceph, etc.), pass the `endpoint_override` parameter to point PyArrow at your object store.
+
+## Google Cloud Storage
+
+GCS uses service account credentials, typically via the `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
+
+<CodeBlock language="python" code={`import pyarrow.fs as pafs
+import ray
+# Option 1: Default credentials (GOOGLE_APPLICATION_CREDENTIALS env var)
+# export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+ds = ray.data.read_parquet("gs://YOUR_GCS_BUCKET/data/features/")
+# Option 2: Explicit filesystem with service account JSON
+gcs = pafs.GcsFileSystem(
+    access_token=None,  # use default credentials
+    project_id="YOUR_GCP_PROJECT",
+)
+ds = ray.data.read_parquet(
+    "YOUR_GCS_BUCKET/data/features/",
+    filesystem=gcs,
+)`} language="python" filename="read_gcs.py" />
+
+On **GKE** (Google Kubernetes Engine), Workload Identity provides credentials automatically -- no service account key files needed.
+
+## Azure Blob Storage
+
+Azure uses connection strings or SAS tokens for authentication.
+
+<CodeBlock language="python" code={`import pyarrow.fs as pafs
+import ray
+# Option 1: Using adlfs (Azure Data Lake Storage filesystem)
+# pip install adlfs
+import adlfs
+az_fs = adlfs.AzureBlobFileSystem(
+    account_name="YOUR_STORAGE_ACCOUNT",
+    account_key="YOUR_ACCOUNT_KEY",
+    # Or use SAS token instead:
+    # sas_token="YOUR_SAS_TOKEN",
+)
+ds = ray.data.read_parquet(
+    "az://YOUR_CONTAINER/data/events/",
+    filesystem=az_fs,
+)
+# Option 2: Connection string
+az_fs = adlfs.AzureBlobFileSystem(
+    connection_string="DefaultEndpointsProtocol=https;"
+    "AccountName=YOUR_STORAGE_ACCOUNT;"
+    "AccountKey=YOUR_ACCOUNT_KEY;"
+    "EndpointSuffix=core.windows.net"
+)
+ds = ray.data.read_parquet("YOUR_CONTAINER/data/", filesystem=az_fs)`} language="python" filename="read_azure.py" />
+
+## Writing Back to Cloud Storage
+
+Writing follows the same URI pattern. Ray Data writes one file per block in parallel across all workers.
+
+<CodeBlock language="python" code={`import ray
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/raw/events/")
+# Transform
+ds = ds.map_batches(lambda batch: batch)  # your transformations here
+# Write back to S3 as Parquet
+ds.write_parquet("s3://YOUR_BUCKET/processed/events/")
+# Write to GCS as CSV
+ds.write_csv("gs://YOUR_GCS_BUCKET/exports/events/")
+# Control the number of output files
+ds.repartition(10).write_parquet("s3://YOUR_BUCKET/output/compact/")`} language="python" filename="write_cloud.py" />
+
+## Filesystem Abstraction with PyArrow
+
+The `pyarrow.fs` module is the glue that makes all of this work. You can pass **any** PyArrow filesystem to Ray Data's read/write methods, which means you can swap backends without changing pipeline logic.
+
+<CodeBlock language="python" code={`import pyarrow.fs as pafs
+import ray
+def get_filesystem(backend: str) -> pafs.FileSystem:
+    """Factory for filesystem backends."""
+    if backend == "s3":
+        return pafs.S3FileSystem(region="us-east-1")
+    elif backend == "gcs":
+        return pafs.GcsFileSystem()
+    elif backend == "local":
+        return pafs.LocalFileSystem()
+    else:
+        raise ValueError(f"Unknown backend: {backend}")
+# Same pipeline code, different backend
+fs = get_filesystem("s3")
+ds = ray.data.read_parquet("YOUR_BUCKET/data/", filesystem=fs)
+ds = ds.filter(lambda row: row["status"] == "active")
+ds.write_parquet("YOUR_BUCKET/output/", filesystem=fs)`} language="python" filename="filesystem_abstraction.py" />
+
+## Performance Tips
+
+Getting maximum throughput from cloud reads requires tuning a few knobs:
+
+**Partition discovery** -- Ray Data lists all files before reading. For directories with thousands of files, this listing step can be slow. Use explicit file lists when possible.
+
+<CodeBlock language="python" code={`import ray
+# Slow: Ray must list the entire directory tree
+ds = ray.data.read_parquet("s3://YOUR_BUCKET/data/")
+# Faster: provide explicit file paths to skip listing
+files = [
+    "s3://YOUR_BUCKET/data/part-00000.parquet",
+    "s3://YOUR_BUCKET/data/part-00001.parquet",
+    "s3://YOUR_BUCKET/data/part-00002.parquet",
+]
+ds = ray.data.read_parquet(files)
+# Use partition filters to read only what you need
+ds = ray.data.read_parquet(
+    "s3://YOUR_BUCKET/data/",
+    partition_filter=ray.data.datasource.partitioning.PathPartitionFilter.of(
+        filter_fn=lambda d: d["year"] == "2024" and d["month"] == "06",
+        style=ray.data.datasource.partitioning.PartitionStyle.HIVE,
+    ),
+)`} language="python" filename="performance_tips.py" />
+
+**Key tuning parameters:**
+- **`override_num_blocks`** -- controls how many parallel read tasks Ray launches. More blocks means more parallelism but higher scheduling overhead.
+- **`ray.data.DataContext.get_current().target_max_block_size`** -- controls the target size per block (default 512 MiB). Smaller blocks improve memory efficiency; larger blocks reduce overhead.
+- **File size alignment** -- aim for Parquet files in the 128 MiB to 1 GiB range. Thousands of tiny files create listing bottlenecks; single huge files prevent parallelism.

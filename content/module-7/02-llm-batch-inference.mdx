@@ -1,0 +1,92 @@
+---
+title: "LLM Batch Inference"
+quiz:
+  - question: "Why does the LLM class load the model in __init__ instead of __call__?"
+    options:
+      - "Python requires it"
+      - "The model is loaded once per actor and reused across all batches, avoiding repeated loading"
+      - "It makes the code shorter"
+      - "__call__ cannot access GPU memory"
+    correctIndex: 1
+    explanation: "Loading in __init__ means each actor loads the multi-gigabyte model once. Loading in __call__ would reload it for every batch — destroying throughput."
+  - question: "What does concurrency control in a GPU inference stage?"
+    options:
+      - "The number of prompts in each batch"
+      - "The number of parallel actor replicas processing batches"
+      - "The maximum GPU memory per actor"
+      - "The model's context window size"
+    correctIndex: 1
+    explanation: "concurrency sets how many actor replicas run simultaneously. With num_gpus=1 per actor, concurrency=4 means 4 GPUs process different batches in parallel."
+---
+
+## Scaling LLM Inference with Ray Data
+
+Running an LLM over millions of prompts is a perfect Ray Data workload: each prompt is independent, GPU utilization is critical, and batching improves throughput.
+
+<MermaidDiagram chart={`graph LR
+    A[Read Prompts\nParquet] --> B[LLM Inference\nGPU Actors]
+    B --> C[Write Results\nParquet]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Approach 1 — HuggingFace Transformers
+
+Ideal for models that fit on a single GPU.
+
+<CodeBlock language="python" code={`import ray
+
+ds = ray.data.read_parquet("s3://data/prompts/")
+
+class HFPredictor:
+    def __init__(self):
+        from transformers import pipeline
+        self.pipe = pipeline(
+            "text-generation", model="meta-llama/Llama-3.1-8B-Instruct",
+            device="cuda", torch_dtype="auto",
+        )
+
+    def __call__(self, batch: dict) -> dict:
+        outputs = self.pipe(batch["prompt"].tolist(), max_new_tokens=256,
+                            batch_size=len(batch["prompt"]))
+        batch["response"] = [o[0]["generated_text"] for o in outputs]
+        return batch
+
+ds = ds.map_batches(HFPredictor, batch_size=32, concurrency=4, num_gpus=1)
+ds.write_parquet("s3://data/results/")
+`} />
+
+## Approach 2 — vLLM for High Throughput
+
+vLLM uses PagedAttention and continuous batching. It supports tensor parallelism across multiple GPUs for large models.
+
+<CodeBlock language="python" code={`class VLLMPredictor:
+    def __init__(self):
+        from vllm import LLM, SamplingParams
+        self.llm = LLM(model="meta-llama/Llama-3.1-70B-Instruct",
+                        tensor_parallel_size=4, max_model_len=4096)
+        self.params = SamplingParams(temperature=0.7, max_tokens=512)
+
+    def __call__(self, batch: dict) -> dict:
+        outputs = self.llm.generate(batch["prompt"].tolist(), self.params)
+        batch["response"] = [o.outputs[0].text for o in outputs]
+        return batch
+
+ds.map_batches(VLLMPredictor, batch_size=256, concurrency=2, num_gpus=4)
+`} />
+
+## Resource Layout
+
+<MermaidDiagram chart={`graph TD
+    DS[Dataset\n1M prompts] --> A1[Actor 1\n4 GPUs\ntensor parallel]
+    DS --> A2[Actor 2\n4 GPUs\ntensor parallel]
+    A1 --> OUT[Results Parquet]
+    A2 --> OUT
+    style DS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style A1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style A2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+**Batch size guidance:** HuggingFace works best with 8-64 (memory-bound). vLLM handles 128-512 efficiently via internal continuous batching. Increase until GPU memory hits ~90%.

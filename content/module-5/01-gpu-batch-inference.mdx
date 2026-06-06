@@ -1,0 +1,94 @@
+---
+title: "GPU Batch Inference"
+quiz:
+  - question: "What is the primary purpose of ActorPoolStrategy in Ray Data?"
+    options:
+      - "To distribute data across CPU cores"
+      - "To maintain persistent GPU workers that keep models loaded in memory"
+      - "To automatically download models from HuggingFace"
+      - "To convert data between formats"
+    correctIndex: 1
+    explanation: "ActorPoolStrategy creates a pool of long-lived actors (workers) that load the model once and reuse it across batches — avoiding the expensive cost of reloading a model for every batch."
+  - question: "Why should you increase batch_size when running GPU inference?"
+    options:
+      - "GPUs cannot process single items"
+      - "It reduces the total amount of data processed"
+      - "Larger batches amortize data transfer overhead and saturate GPU parallelism"
+      - "It is required by PyTorch"
+    correctIndex: 2
+    explanation: "GPUs achieve peak throughput when processing large batches. Larger batch sizes amortize the CPU-to-GPU data transfer cost and keep GPU cores busy with parallel computation."
+---
+
+## The GPU Inference Challenge
+
+Running a model on millions of inputs requires solving two problems: **loading the model** (expensive, do it once) and **batching inputs** (GPUs are fast only when saturated). Ray Data solves both with `map_batches` combined with actor pools.
+
+<MermaidDiagram chart={`graph LR
+    DS[Dataset\nMillions of rows] --> B1[Batch 1\n1024 rows]
+    DS --> B2[Batch 2\n1024 rows]
+    DS --> B3[Batch 3\n1024 rows]
+    B1 --> G1["GPU Actor 1\n(model loaded once)"]
+    B2 --> G2["GPU Actor 2\n(model loaded once)"]
+    B3 --> G1
+    G1 --> R1[Predictions]
+    G2 --> R2[Predictions]
+    style DS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style G1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style G2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style R1 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
+    style R2 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
+`} />
+
+## Model Loading with a Callable Class
+
+The key pattern is a **callable class** -- the constructor loads the model once, and `__call__` runs inference on each batch.
+
+<CodeBlock language="python" code={`import ray
+from ray.data import ActorPoolStrategy
+
+class ImageClassifier:
+    def __init__(self):
+        import torch
+        from torchvision.models import resnet50, ResNet50_Weights
+        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).cuda().eval()
+        self.transforms = ResNet50_Weights.DEFAULT.transforms()
+
+    def __call__(self, batch: dict) -> dict:
+        import torch
+        images = [self.transforms(img) for img in batch["image"]]
+        tensor = torch.stack(images).cuda()
+        with torch.no_grad():
+            preds = self.model(tensor)
+        batch["prediction"] = preds.argmax(dim=1).cpu().numpy()
+        return batch`} />
+
+## Putting It Together: ActorPoolStrategy
+
+`ActorPoolStrategy` tells Ray to create a fixed pool of GPU actors. Each actor loads the model once and processes many batches.
+
+<CodeBlock language="python" code={`ds = ray.data.read_images("s3://my-bucket/images/")
+
+predictions = ds.map_batches(
+    ImageClassifier,
+    compute=ActorPoolStrategy(size=4),  # 4 GPU workers
+    num_gpus=1,                         # 1 GPU per worker
+    batch_size=256,                     # rows per batch
+)
+
+predictions.write_parquet("s3://my-bucket/results/")`} />
+
+## Tuning Batch Size
+
+Choose `batch_size` based on GPU memory. Too small wastes GPU cycles; too large causes out-of-memory errors.
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Batch Size Tradeoffs"
+    SM["batch_size=32\nLow GPU utilization\nSafe on memory"] --> MED["batch_size=256\nGood throughput\nRecommended start"]
+    MED --> LG["batch_size=1024\nMax throughput\nRisk of OOM"]
+    end
+    style SM fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style MED fill:#68d391,stroke:#68d391,color:#1a1d27
+    style LG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+**Rule of thumb:** Start with `batch_size=256`, monitor GPU memory with `nvidia-smi`, and increase until you approach 80% memory usage.

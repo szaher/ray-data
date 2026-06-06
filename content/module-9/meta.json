@@ -1,0 +1,53 @@
+{
+  "id": 9,
+  "title": "Ray Dashboard & Monitoring",
+  "description": "Monitor, debug, and observe Ray Data pipelines with the Ray Dashboard and metrics",
+  "color": "#b794f4",
+  "lessons": [
+    {
+      "slug": "01-dashboard-overview",
+      "title": "Ray Dashboard Overview",
+      "description": "Launching, navigating, and understanding the Ray Dashboard UI",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-monitoring-pipelines",
+      "title": "Monitoring Data Pipelines",
+      "description": "Tracking dataset execution, operator progress, and resource usage",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "flowchart",
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-metrics-observability",
+      "title": "Metrics, Logging & Observability",
+      "description": "Prometheus, Grafana integration, custom metrics, and structured logging",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-debugging-dashboard",
+      "title": "Debugging with the Dashboard",
+      "description": "Using the dashboard to diagnose OOM, stragglers, and failed tasks",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
+  ]
+}

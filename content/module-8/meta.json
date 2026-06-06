@@ -1,0 +1,65 @@
+{
+  "id": 8,
+  "title": "Ray Data vs Apache Spark",
+  "description": "Deep comparison of Ray Data and Spark \u2014 architecture, APIs, migration, and when to use each",
+  "color": "#ed8936",
+  "lessons": [
+    {
+      "slug": "01-architecture-comparison",
+      "title": "Architecture: Ray vs Spark",
+      "description": "Driver-worker models, execution engines, memory management compared",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "architecture",
+        "comparison"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-api-comparison",
+      "title": "API Side-by-Side",
+      "description": "The same operations in PySpark and Ray Data \u2014 read, transform, aggregate, write",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "comparison"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-migration-guide",
+      "title": "Migrating from Spark to Ray Data",
+      "description": "Step-by-step migration patterns, gotchas, and common pitfalls",
+      "estimatedMinutes": 20,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-spark-on-ray",
+      "title": "Spark on Ray (RayDP)",
+      "description": "Running Spark workloads on Ray clusters with RayDP",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "05-performance-tradeoffs",
+      "title": "Performance & When to Choose",
+      "description": "Benchmarks, scaling characteristics, and decision framework",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "comparison",
+        "chart"
+      ],
+      "hasCode": false,
+      "hasQuiz": true
+    }
+  ]
+}

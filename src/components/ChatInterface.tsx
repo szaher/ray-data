@@ -154,8 +154,8 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 border-t border-white/[0.08]">
-        <div className="flex items-center gap-2 bg-[var(--bg-secondary)] rounded-xl border border-white/[0.08] px-4 py-2">
+      <div className="p-4 border-t border-[var(--border)]">
+        <div className="flex items-center gap-2 bg-[var(--bg-secondary)] rounded-xl border border-[var(--border)] px-4 py-2">
           <input
             type="text"
             value={input}

@@ -1,0 +1,98 @@
+---
+title: "Image Processing Pipeline"
+quiz:
+  - question: "Why is map_batches preferred over map for image processing in Ray Data?"
+    options:
+      - "map_batches produces higher quality images"
+      - "Batching amortizes overhead and enables vectorized operations on GPU tensors"
+      - "map_batches is the only function that supports images"
+      - "map does not work with NumPy arrays"
+    correctIndex: 1
+    explanation: "map_batches processes chunks of images together, amortizing per-call overhead and enabling vectorized GPU operations — critical for throughput."
+  - question: "What is the purpose of concurrency and num_gpus in map_batches for image pipelines?"
+    options:
+      - "It tells Ray Data to download more images"
+      - "It controls how many GPU actors run in parallel for that stage"
+      - "It changes the image resolution"
+      - "It enables distributed file storage"
+    correctIndex: 1
+    explanation: "concurrency sets the number of parallel actor workers, and num_gpus requests GPU resources per worker — together they control GPU-accelerated parallelism."
+---
+
+## End-to-End Image Processing
+
+Image pipelines are a natural fit for Ray Data: images are independent, processing is compute-heavy, and throughput matters.
+
+<MermaidDiagram chart={`graph LR
+    A[Read Images\nS3 / Local] --> B[Resize & Normalize\nCPU]
+    B --> C[Classify\nResNet on GPU]
+    C --> D[Write Results\nParquet]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#68d391,stroke:#68d391,color:#1a1d27
+    style C fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style D fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Step 1 — Read and Transform
+
+<CodeBlock language="python" code={`import ray
+import numpy as np
+
+ds = ray.data.read_images("s3://my-bucket/images/", mode="RGB")
+
+def preprocess(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    from PIL import Image
+    images = []
+    for img in batch["image"]:
+        pil = Image.fromarray(img).resize((224, 224))
+        arr = np.array(pil, dtype=np.float32) / 255.0
+        mean, std = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
+        images.append((arr - mean) / std)
+    batch["image"] = np.stack(images)
+    return batch
+
+ds = ds.map_batches(preprocess, batch_format="numpy")
+`} />
+
+## Step 2 — GPU Inference with an Actor Class
+
+Wrap model loading in a class so the model is loaded once per actor, not once per batch.
+
+<CodeBlock language="python" code={`import torch
+from torchvision.models import resnet50, ResNet50_Weights
+
+class ImageClassifier:
+    def __init__(self):
+        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).eval().cuda()
+        self.labels = ResNet50_Weights.DEFAULT.meta["categories"]
+
+    def __call__(self, batch: dict[str, np.ndarray]) -> dict:
+        tensors = torch.from_numpy(batch["image"]).permute(0, 3, 1, 2).cuda()
+        with torch.no_grad():
+            preds = self.model(tensors).argmax(dim=1).cpu().numpy()
+        return {"label": [self.labels[p] for p in preds]}
+
+ds = ds.map_batches(ImageClassifier, batch_size=64, concurrency=2, num_gpus=1)
+ds.write_parquet("s3://my-bucket/results/")
+`} />
+
+## Architecture Summary
+
+<MermaidDiagram chart={`graph TD
+    subgraph CPU["CPU Workers"]
+        R[read_images] --> P[preprocess]
+    end
+    subgraph GPU["GPU Actors x2"]
+        P --> G1[Classifier\nGPU 0]
+        P --> G2[Classifier\nGPU 1]
+    end
+    G1 --> W[write_parquet]
+    G2 --> W
+    style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style P fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style G1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style G2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style W fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+Key points: **read_images** handles decoding; CPU transforms run on many workers automatically; the GPU stage uses a class-based callable so the model loads once; `concurrency=2` runs two GPU actors in parallel.

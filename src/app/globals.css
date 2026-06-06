@@ -1,6 +1,25 @@
 @import "tailwindcss";
 
 :root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f8fa;
+  --bg-tertiary: #edf0f5;
+  --text-primary: #1a202c;
+  --text-secondary: #4a5568;
+  --accent-blue: #3182ce;
+  --accent-green: #38a169;
+  --accent-purple: #805ad5;
+  --accent-orange: #dd6b20;
+  --accent-red: #e53e3e;
+  --accent-yellow: #d69e2e;
+  --accent-teal: #319795;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.16);
+  --stripe-bg: rgba(0, 0, 0, 0.02);
+  --tts-highlight: rgba(49, 130, 206, 0.06);
+}
+
+[data-theme="dark"] {
   --bg-primary: #0f1117;
   --bg-secondary: #1a1d27;
   --bg-tertiary: #242734;
@@ -14,10 +33,147 @@
   --accent-yellow: #ecc94b;
   --accent-teal: #4fd1c5;
   --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --stripe-bg: rgba(255, 255, 255, 0.02);
+  --tts-highlight: rgba(99, 179, 237, 0.06);
 }
 
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: system-ui, -apple-system, sans-serif;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  color: var(--text-primary);
+}
+.chat-markdown h1 { font-size: 1.25rem; }
+.chat-markdown h2 { font-size: 1.125rem; }
+.chat-markdown h3 { font-size: 1rem; }
+
+.chat-markdown p {
+  margin-bottom: 0.5em;
+}
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-markdown em {
+  font-style: italic;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+.chat-markdown ul { list-style-type: disc; }
+.chat-markdown ol { list-style-type: decimal; }
+
+.chat-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.chat-markdown code {
+  background: var(--bg-tertiary);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+
+.chat-markdown a {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+
+.chat-markdown blockquote {
+  border-left: 3px solid var(--accent-blue);
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: var(--text-secondary);
+}
+
+.chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.875em;
+}
+
+.chat-markdown th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.chat-markdown td {
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--border);
+}
+
+.chat-markdown tr:nth-child(even) {
+  background: var(--stripe-bg);
+}
+
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.tts-active-section {
+  background: var(--tts-highlight);
+  border-left: 2px solid var(--accent-blue);
+  padding-left: 0.75rem;
+  margin-left: -0.8rem;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.prose {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--accent-blue);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-secondary);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-quote-borders: var(--accent-blue);
+  --tw-prose-captions: var(--text-secondary);
+  --tw-prose-code: var(--text-primary);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--bg-tertiary);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+.prose h2,
+.prose h3 {
+  border-left: 3px solid var(--accent-blue);
+  padding-left: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  background: linear-gradient(90deg, var(--tts-highlight) 0%, transparent 100%);
+  border-radius: 0 6px 6px 0;
+}
+
+.prose:hover .section-play-btn {
+  opacity: 0.4;
+}
+.prose .section-play-btn:hover {
+  opacity: 1 !important;
 }

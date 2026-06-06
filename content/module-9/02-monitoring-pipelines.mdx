@@ -1,0 +1,177 @@
+---
+title: "Monitoring Data Pipelines"
+quiz:
+  - question: "What does the Dataset.stats() method return?"
+    options:
+      - "A live dashboard URL for the dataset"
+      - "A string summary of per-operator execution statistics including wall time, rows processed, and throughput"
+      - "A dictionary of Prometheus metric values"
+      - "The number of blocks in the dataset"
+    correctIndex: 1
+    explanation: "Dataset.stats() returns a formatted string with per-operator statistics including wall clock time, rows processed, throughput (rows/sec), memory usage, and block-level details. It is the primary programmatic way to inspect pipeline performance."
+  - question: "Which symptom in the operator execution timeline most likely indicates data skew?"
+    options:
+      - "All operators finish at exactly the same time"
+      - "A few tasks in one operator take much longer than the rest"
+      - "The pipeline completes faster than expected"
+      - "No operators run in parallel"
+    correctIndex: 1
+    explanation: "Data skew means some partitions contain far more data than others. In the execution timeline, this appears as a few tasks within an operator running much longer than their peers — the fast tasks finish quickly while the slow ones hold up the entire operator."
+---
+
+## Monitoring Ray Data in the Jobs Tab
+
+When you execute a Ray Data pipeline, it appears as a job in the Dashboard's Jobs tab. The dashboard provides a specialized view for data pipelines that goes beyond simple task counting — it shows the **operator-level execution graph**.
+
+Each operator in your pipeline (read, map, filter, repartition, write) appears as a node in a visual DAG. Next to each operator you see:
+
+- **Rows processed** — how many input rows have been consumed and output rows produced
+- **Progress** — percentage complete based on blocks processed
+- **State** — RUNNING, FINISHED, or PENDING
+- **Throughput** — rows per second being processed
+
+This gives you an at-a-glance view of where your pipeline is and which operator is currently the active bottleneck.
+
+## The Operator Execution Timeline
+
+The execution timeline is a Gantt-chart view that shows when each operator starts, how long it runs, and how operators overlap during streaming execution.
+
+<MermaidDiagram chart={`gantt
+    title Ray Data Pipeline Execution Timeline
+    dateFormat X
+    axisFormat %s
+    section Read
+        read_parquet (24 blocks)     :done, r1, 0, 8
+    section Map
+        preprocess (24 blocks)       :active, m1, 3, 15
+    section Filter
+        filter_invalid (24 blocks)   :f1, 10, 18
+    section Write
+        write_parquet (24 blocks)    :w1, 14, 22`} />
+
+In streaming execution mode — the default for Ray Data — operators overlap. The Read operator does not need to finish all blocks before the Map operator starts consuming them. Blocks flow through the pipeline as they become available.
+
+On the dashboard, you see this as overlapping bars in the task timeline. If you notice that one operator's bar stretches far beyond the others, that operator is your bottleneck.
+
+## Identifying Bottlenecks
+
+There are three common bottleneck patterns you can spot from the dashboard:
+
+**Slow Operators** — One operator takes disproportionately longer than others. In the timeline view, its tasks form a long horizontal band while other operators have short task bars. Fix this by increasing the `concurrency` parameter or optimizing the UDF.
+
+**Data Skew** — Most tasks in an operator finish quickly, but a few take much longer. On the Jobs page, the progress bar shows most tasks completed with a small number still running. Fix this with `.repartition()` before the slow operator to rebalance block sizes.
+
+**Resource Contention** — All operators run slowly. The Cluster page shows CPUs or GPUs pegged at 100%. The pipeline is competing with other jobs for resources. Fix this by reserving resources with `num_cpus` or `num_gpus`, or by scaling up the cluster.
+
+<MermaidDiagram chart={`graph TD
+    SLOW["Symptom: Pipeline is slow"]
+    SLOW --> CHECK1{"One operator much\nslower than others?"}
+    CHECK1 -->|Yes| BOTTLENECK["Bottleneck Operator"]
+    BOTTLENECK --> FIX1["Increase concurrency\nor optimize UDF"]
+    CHECK1 -->|No| CHECK2{"A few tasks in one\noperator take much longer?"}
+    CHECK2 -->|Yes| SKEW["Data Skew"]
+    SKEW --> FIX2["Add .repartition()\nbefore slow operator"]
+    CHECK2 -->|No| CHECK3{"All CPUs/GPUs\nat 100%?"}
+    CHECK3 -->|Yes| CONTENTION["Resource Contention"]
+    CONTENTION --> FIX3["Scale cluster or\nreserve resources"]
+    CHECK3 -->|No| OTHER["Check network I/O\nor object store spilling"]
+    style SLOW fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style BOTTLENECK fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style SKEW fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style CONTENTION fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style FIX1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style FIX3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style OTHER fill:#f6e05e,stroke:#f6e05e,color:#1a1d27`} />
+
+## Programmatic Monitoring with stats()
+
+While the dashboard gives you a visual view, `Dataset.stats()` gives you the same information programmatically. Call it after a pipeline has executed to get a detailed breakdown:
+
+<CodeBlock code={`import ray
+ds = ray.data.read_parquet("s3://my-bucket/events/")
+ds = ds.map(lambda row: {**row, "label": row["category"].upper()})
+ds = ds.filter(lambda row: row["value"] > 100)
+# Trigger execution and collect results
+result = ds.materialize()
+# Print detailed per-operator statistics
+print(result.stats())
+# Output:
+# Operator 1 ReadParquet->SplitBlocks(24):
+#   0 tasks executed, 24 blocks produced
+#   Wall time: 3.2s
+#   Output: 24 blocks, 1.5GB, 12000000 rows
+#   Throughput: 3750000 rows/s
+#
+# Operator 2 Map(preprocess):
+#   24 tasks executed
+#   Wall time: 8.1s
+#   Throughput: 1481481 rows/s
+#   Peak memory: 512MB
+#
+# Operator 3 Filter(filter_invalid):
+#   24 tasks executed
+#   Wall time: 2.4s
+#   Output: 24 blocks, 900MB, 7200000 rows
+#   Throughput: 3000000 rows/s`} language="python" filename="pipeline_stats.py" />
+
+The stats output tells you:
+- **Wall time** per operator — how long it actually took
+- **Throughput** — rows per second, so you can compare operators
+- **Peak memory** — the maximum memory used by any single task
+- **Block counts** — how many blocks were produced and consumed
+
+## Monitoring Streaming Pipelines
+
+For streaming pipelines using `iter_batches()` or `iter_rows()`, monitoring works slightly differently because execution is lazy and incremental:
+
+<CodeBlock code={`import ray
+ds = ray.data.read_parquet("s3://my-bucket/large-dataset/")
+ds = ds.map(lambda row: {**row, "processed": True})
+# Streaming execution — blocks are processed as consumed
+for batch in ds.iter_batches(batch_size=4096):
+    process(batch)
+# After streaming completes, stats reflect the full execution
+print(ds.stats())`} language="python" filename="streaming_monitor.py" />
+
+During streaming execution, the terminal shows a **progress bar** that updates in real time:
+
+```
+Running 0:  33%|###       | 8/24 [00:04<00:08, 1.92 blocks/s]
+Running 1:  25%|##        | 6/24 [00:03<00:09, 1.80 blocks/s]
+```
+
+Each line corresponds to an operator. The progress bar shows:
+- Operator index and name
+- Percentage and block count
+- Elapsed time and estimated time remaining
+- Throughput in blocks per second
+
+This progress bar is written to stderr so it does not interfere with stdout output.
+
+## Resource Utilization During Execution
+
+While your pipeline runs, switch to the **Cluster** tab in the dashboard to see resource utilization in real time. Key things to watch:
+
+- **CPU utilization** — for CPU-bound operators like map with heavy transformations. If CPUs are not near 100%, you may have too few concurrent tasks or an I/O bottleneck.
+- **Memory utilization** — if memory climbs steadily and approaches the limit, you risk OOM. Watch for the object store usage specifically, as Ray Data uses the object store to pass blocks between operators.
+- **GPU utilization** — for ML inference pipelines. If GPUs are idle between batches, the preceding CPU operator may not be feeding data fast enough.
+
+<CodeBlock code={`import ray
+# Check resource utilization programmatically
+print(ray.cluster_resources())
+# {'CPU': 32, 'GPU': 4, 'memory': 68719476736, ...}
+print(ray.available_resources())
+# {'CPU': 12.0, 'GPU': 1.0, 'memory': 34359738368, ...}
+# The difference tells you what is currently in use:
+# 20 CPUs in use, 3 GPUs in use, 32GB memory in use`} language="python" filename="resource_check.py" />
+
+## Tips for Effective Monitoring
+
+1. **Always call `.stats()` after pipeline execution** — it costs nothing and gives you a performance baseline to compare against future runs.
+
+2. **Watch the progress bar during development** — if one operator's progress stalls while others advance, you have found your bottleneck.
+
+3. **Use the Cluster tab to correlate** — a slow operator combined with low CPU usage suggests an I/O bottleneck; a slow operator with high CPU usage suggests a compute bottleneck.
+
+4. **Check block sizes** — in the stats output, look at block sizes. Blocks that are too small (under 1MB) create excessive scheduling overhead. Blocks that are too large (over 1GB) cause memory pressure. Use `.repartition()` to adjust.

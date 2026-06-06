@@ -1,5 +1,7 @@
 "use client";
 
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import MermaidDiagram from "./MermaidDiagram";
 
 interface ChatMessageProps {
@@ -19,7 +21,7 @@ export default function ChatMessage({ role, content }: ChatMessageProps) {
         className={`rounded-xl px-4 py-3 ${
           role === "user"
             ? "bg-[var(--accent-blue)]/10 border border-[var(--accent-blue)]/20"
-            : "bg-[var(--bg-secondary)] border border-white/[0.08]"
+            : "bg-[var(--bg-secondary)] border border-[var(--border)]"
         }`}
       >
         {parts.map((part, i) => {
@@ -37,8 +39,8 @@ export default function ChatMessage({ role, content }: ChatMessageProps) {
             );
           }
           return (
-            <div key={i} className="text-sm leading-relaxed whitespace-pre-wrap">
-              {part.content}
+            <div key={i} className="chat-markdown text-sm leading-relaxed">
+              <Markdown remarkPlugins={[remarkGfm]}>{part.content}</Markdown>
             </div>
           );
         })}

@@ -1,0 +1,226 @@
+---
+title: "Data Lakes: Delta Lake & Iceberg"
+quiz:
+  - question: "What feature of Delta Lake does Ray Data leverage for time travel queries?"
+    options:
+      - "Delta Lake's compaction service"
+      - "The transaction log with versioned snapshots"
+      - "Delta Lake's built-in query optimizer"
+      - "The Z-ORDER clustering index"
+    correctIndex: 1
+    explanation: "Delta Lake maintains a transaction log that records every change as a new version. Ray Data can read a specific snapshot version using the 'version' parameter, enabling time travel to any previous state of the table."
+  - question: "What is the primary advantage of predicate pushdown when reading from Iceberg or Delta Lake?"
+    options:
+      - "It compresses data before transfer"
+      - "It skips entire files and row groups that cannot match the filter, reducing I/O"
+      - "It rewrites the table in a more optimal format"
+      - "It creates a local cache of frequently accessed partitions"
+    correctIndex: 1
+    explanation: "Predicate pushdown uses partition metadata and column statistics stored in the table's metadata layer to skip files and row groups that cannot possibly match the filter condition, dramatically reducing the amount of data read from storage."
+---
+
+## The Lakehouse Pattern
+
+Modern data architectures increasingly use **lakehouse** formats -- open table formats that bring database-like features (ACID transactions, schema evolution, time travel) to files sitting in cloud object stores. Ray Data integrates with the two most popular formats: **Delta Lake** and **Apache Iceberg**.
+
+<MermaidDiagram chart={`graph TB
+    subgraph "Cloud Object Store (S3/GCS/Azure)"
+        P1[Parquet Files]
+        P2[Parquet Files]
+        P3[Parquet Files]
+    end
+    subgraph "Table Format Layer"
+        DL["Delta Lake\n_delta_log/"]
+        IC["Iceberg\nmetadata/"]
+    end
+    subgraph "Ray Data Pipeline"
+        RD[ray.data.read_delta\nray.data.read_iceberg] --> MAP[map_batches]
+        MAP --> WRITE[write_delta\nwrite_parquet]
+    end
+    DL --> P1
+    DL --> P2
+    IC --> P2
+    IC --> P3
+    RD --> DL
+    RD --> IC
+    style DL fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style IC fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style RD fill:#68d391,stroke:#68d391,color:#1a1d27
+    style MAP fill:#242734,stroke:#68d391,color:#e0e0e0
+    style WRITE fill:#242734,stroke:#68d391,color:#e0e0e0
+    style P1 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style P2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style P3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+Both formats store the actual data as **Parquet files** in object storage. The table format adds a metadata layer on top that tracks which files belong to the current table version, column statistics, partition information, and the full history of changes.
+
+## Reading Delta Lake Tables
+
+Delta Lake is the most widely adopted lakehouse format, originated at Databricks. Install the `deltalake` Python package to enable Ray Data's Delta integration.
+
+<CodeBlock language="bash" code={`pip install deltalake ray[data]`} language="bash" filename="install.sh" />
+
+<CodeBlock language="python" code={`import ray
+# Read a Delta Lake table from local storage
+ds = ray.data.read_delta("./warehouse/events_delta/")
+# Read from S3
+ds = ray.data.read_delta("s3://YOUR_BUCKET/warehouse/events_delta/")
+print(ds.schema())
+print(f"Num rows: {ds.count()}")
+print(ds.take(5))`} language="python" filename="read_delta.py" />
+
+### Time Travel with Delta Lake
+
+Delta Lake records every write as a new **version** in its transaction log. You can read any historical snapshot by passing the version number.
+
+<CodeBlock language="python" code={`import ray
+# Read the current (latest) version
+ds_latest = ray.data.read_delta("s3://YOUR_BUCKET/warehouse/events/")
+# Read a specific historical version (time travel)
+ds_v5 = ray.data.read_delta(
+    "s3://YOUR_BUCKET/warehouse/events/",
+    version=5,
+)
+# Compare row counts between versions
+print(f"Latest: {ds_latest.count()} rows")
+print(f"Version 5: {ds_v5.count()} rows")
+# Use deltalake directly to inspect available versions
+from deltalake import DeltaTable
+dt = DeltaTable("s3://YOUR_BUCKET/warehouse/events/")
+print(f"Current version: {dt.version()}")
+print(f"History: {dt.history()}")`} language="python" filename="delta_time_travel.py" />
+
+This is invaluable for **auditing**, **debugging** data issues, and **reproducing** ML training runs with the exact data that was available at a specific point in time.
+
+## Writing to Delta Lake
+
+Ray Data can write results back to Delta Lake tables, creating new versions atomically.
+
+<CodeBlock language="python" code={`import ray
+# Read, transform, and write back to Delta
+ds = ray.data.read_delta("s3://YOUR_BUCKET/warehouse/raw_events/")
+# Apply transformations
+ds = ds.filter(lambda row: row["event_type"] != "heartbeat")
+ds = ds.map(lambda row: {**row, "processed": True})
+# Write to a new Delta table
+ds.write_delta("s3://YOUR_BUCKET/warehouse/processed_events/")
+# Overwrite an existing Delta table
+ds.write_delta(
+    "s3://YOUR_BUCKET/warehouse/processed_events/",
+    mode="overwrite",
+)`} language="python" filename="write_delta.py" />
+
+## Reading Apache Iceberg Tables
+
+Apache Iceberg is the other major lakehouse format, incubated at Netflix and now an Apache top-level project. It is widely used in the Spark, Trino, and Flink ecosystems.
+
+<CodeBlock language="python" code={`# pip install pyiceberg ray[data]
+import ray
+from pyiceberg.catalog import load_catalog
+# Configure the Iceberg catalog
+catalog = load_catalog(
+    "my_catalog",
+    **{
+        "type": "rest",
+        "uri": "https://YOUR_ICEBERG_REST_CATALOG:8181",
+        "s3.access-key-id": "YOUR_ACCESS_KEY",
+        "s3.secret-access-key": "YOUR_SECRET_KEY",
+        "warehouse": "s3://YOUR_BUCKET/iceberg-warehouse/",
+    },
+)
+# Load an Iceberg table
+table = catalog.load_table("db.events")
+# Read into Ray Data
+ds = ray.data.read_iceberg(table)
+print(ds.schema())
+print(f"Rows: {ds.count()}")`} language="python" filename="read_iceberg.py" />
+
+### Iceberg with Glue Catalog
+
+In AWS environments, the **Glue Data Catalog** is a common Iceberg catalog backend:
+
+<CodeBlock language="python" code={`from pyiceberg.catalog import load_catalog
+import ray
+# AWS Glue-backed Iceberg catalog
+catalog = load_catalog(
+    "glue",
+    **{
+        "type": "glue",
+        "glue.region": "us-east-1",
+        "warehouse": "s3://YOUR_BUCKET/iceberg-warehouse/",
+    },
+)
+table = catalog.load_table("analytics_db.user_sessions")
+ds = ray.data.read_iceberg(table)
+# Apply transformations
+ds = ds.filter(lambda row: row["duration_seconds"] > 30)`} language="python" filename="iceberg_glue.py" />
+
+## Schema Evolution
+
+Both Delta Lake and Iceberg support **schema evolution** -- adding, removing, or renaming columns without rewriting existing data. Ray Data handles this transparently.
+
+<CodeBlock language="python" code={`import ray
+# Suppose the Delta table originally had columns: [id, name, email]
+# and a new column "phone" was added in version 10.
+# Reading the latest version includes the new column.
+# Rows written before version 10 have null for "phone".
+ds = ray.data.read_delta("s3://YOUR_BUCKET/warehouse/users/")
+print(ds.schema())
+# Output: id: int64, name: string, email: string, phone: string
+# Reading an older version returns the original schema
+ds_old = ray.data.read_delta(
+    "s3://YOUR_BUCKET/warehouse/users/",
+    version=5,
+)
+print(ds_old.schema())
+# Output: id: int64, name: string, email: string`} language="python" filename="schema_evolution.py" />
+
+## Partition Pruning and Predicate Pushdown
+
+Lakehouse formats store **partition metadata** and **column statistics** (min/max values per file). When you apply filters, Ray Data can skip entire files that cannot match, dramatically reducing I/O.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Delta Table (100 files)"
+        F1["year=2023\n20 files"]
+        F2["year=2024\n40 files"]
+        F3["year=2025\n40 files"]
+    end
+    subgraph "Filter: year=2024"
+        PRUNE["Partition Pruning\nSkip 60 files"] --> READ["Read 40 files"]
+        READ --> PUSH["Predicate Pushdown\nSkip row groups\nwhere max(age) < 25"]
+    end
+    F2 --> PRUNE
+    style F1 fill:#242734,stroke:#fc8181,color:#fc8181
+    style F2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style F3 fill:#242734,stroke:#fc8181,color:#fc8181
+    style PRUNE fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style READ fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PUSH fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+<CodeBlock language="python" code={`import ray
+# Partition pruning: only read partitions matching the filter.
+# Delta Lake tables partitioned by year/month:
+ds = ray.data.read_delta(
+    "s3://YOUR_BUCKET/warehouse/events/",
+    # deltalake supports predicate pushdown via filters
+)
+# For Parquet-level pushdown, use columns and filter arguments
+ds = ray.data.read_parquet(
+    "s3://YOUR_BUCKET/warehouse/events/",
+    columns=["user_id", "event_type", "timestamp"],  # column projection
+    filter=(
+        (ray.data.datasource.parquet_datasource.pa.compute.field("year") == 2024)
+        & (ray.data.datasource.parquet_datasource.pa.compute.field("month") == 6)
+    ),
+)
+# With PyArrow filters directly
+import pyarrow.compute as pc
+ds = ray.data.read_parquet(
+    "s3://YOUR_BUCKET/warehouse/events/",
+    filter=pc.field("year") == 2024,
+)
+print(f"Filtered rows: {ds.count()}")`} language="python" filename="pushdown.py" />
+
+**Key takeaway:** Always push filters as close to the data source as possible. Reading 10 files instead of 1,000 is orders of magnitude faster than reading everything and filtering in Python.

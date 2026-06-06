@@ -1,0 +1,96 @@
+---
+title: "Reading Data"
+quiz:
+  - question: "What happens when you call ray.data.read_csv('data.csv')?"
+    options:
+      - "The entire CSV is loaded into memory immediately"
+      - "A lazy Dataset is created — data is read only when consumed"
+      - "The CSV is converted to Parquet on disk"
+      - "Ray starts a Spark job to read the file"
+    correctIndex: 1
+    explanation: "Ray Data read operations are lazy. Calling read_csv() creates a Dataset object that records where the data lives, but actual reading happens only when you consume the data (iterate, show, write, etc.)."
+  - question: "Which reader would you use to load a directory of PNG files for an image ML pipeline?"
+    options:
+      - "ray.data.read_csv()"
+      - "ray.data.read_parquet()"
+      - "ray.data.read_images()"
+      - "ray.data.from_items()"
+    correctIndex: 2
+    explanation: "ray.data.read_images() is purpose-built for loading image files from a directory. It reads them as numpy arrays, ready for ML preprocessing."
+---
+
+## Data Sources
+
+Ray Data can read from local files, cloud storage (S3, GCS, Azure Blob), and in-memory Python objects. Every reader returns a `Dataset`.
+
+<MermaidDiagram chart={`graph LR
+    CSV[CSV Files] --> R[Ray Data Readers]
+    PQ[Parquet Files] --> R
+    JSON[JSON Files] --> R
+    IMG[Image Files] --> R
+    MEM[Python Objects] --> R
+    R --> DS[Dataset\nDistributed Blocks]
+    style R fill:#b794f4,stroke:#b794f4,color:#1a1d27
+    style DS fill:#68d391,stroke:#68d391,color:#1a1d27
+    style CSV fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PQ fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style JSON fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style IMG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style MEM fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+`} />
+
+## Reading Structured Data
+
+<CodeBlock language="python" code={`import ray
+
+# CSV — single file or directory of files
+ds = ray.data.read_csv("s3://bucket/data/users.csv")
+ds = ray.data.read_csv("s3://bucket/data/csvs/")  # reads all CSVs in directory
+
+# Parquet — columnar format, best performance
+ds = ray.data.read_parquet("data/events.parquet")
+ds = ray.data.read_parquet("s3://bucket/events/", columns=["user_id", "action"])
+
+# JSON — line-delimited JSON files
+ds = ray.data.read_json("logs/2024-01-*.json")`} />
+
+## Reading Images
+
+For ML pipelines that process images, `read_images` loads files as numpy arrays.
+
+<CodeBlock language="python" code={`# Read all images from a directory
+ds = ray.data.read_images("s3://bucket/training-images/")
+
+# Resize on read for consistency
+ds = ray.data.read_images("s3://bucket/images/", size=(224, 224))
+
+# Each row has an "image" column containing a numpy array
+ds.schema()
+# Column  Type
+# ------  ----
+# image   numpy.ndarray(shape=(224, 224, 3), dtype=uint8)`} />
+
+## Creating Datasets from Python
+
+Use `from_items` for small in-memory data, useful for testing and prototyping.
+
+<CodeBlock language="python" code={`# From a list of dictionaries
+ds = ray.data.from_items([
+    {"name": "Alice", "age": 30},
+    {"name": "Bob", "age": 25},
+    {"name": "Carol", "age": 35},
+])
+
+# Check what you have
+ds.show(3)
+# {'name': 'Alice', 'age': 30}
+# {'name': 'Bob', 'age': 25}
+# {'name': 'Carol', 'age': 35}`} />
+
+## Choosing the Right Format
+
+**Parquet** is almost always the best choice for production. It is columnar, compressed, and supports predicate pushdown — Ray Data reads only the columns and row groups you need.
+
+**CSV/JSON** work but are slower to read and use more memory. Use them when your upstream system produces them and converting is not an option.
+
+**read_images** is the right choice when your data is a directory of image files, which is common in computer vision workflows.

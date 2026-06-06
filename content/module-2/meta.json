@@ -1,13 +1,41 @@
 {
   "id": 2,
-  "title": "Ray Core",
-  "description": "Hands-on with Ray's primitives: tasks, actors, and the object store",
-  "color": "#63b3ed",
+  "title": "Getting Started",
+  "description": "Install Ray, set up your environment, and run your first Ray Data pipeline",
+  "color": "#4fd1c5",
   "lessons": [
-    { "slug": "01-ray-init", "title": "ray.init() & Clusters", "description": "Starting Ray, local vs cluster mode", "estimatedMinutes": 12, "diagramTypes": ["architecture"], "hasCode": true, "hasQuiz": true },
-    { "slug": "02-tasks", "title": "Tasks", "description": "@ray.remote functions, ObjectRef, ray.get()", "estimatedMinutes": 15, "diagramTypes": ["flowchart", "scheduling"], "hasCode": true, "hasQuiz": true },
-    { "slug": "03-actors", "title": "Actors", "description": "Stateful workers with @ray.remote classes", "estimatedMinutes": 15, "diagramTypes": ["lifecycle", "state"], "hasCode": true, "hasQuiz": true },
-    { "slug": "04-object-store", "title": "Object Store & Object Refs", "description": "Distributed shared memory and zero-copy reads", "estimatedMinutes": 15, "diagramTypes": ["data-flow", "memory"], "hasCode": true, "hasQuiz": true },
-    { "slug": "05-placement-groups", "title": "Placement Groups & Resources", "description": "Resource scheduling, PACK vs SPREAD", "estimatedMinutes": 12, "diagramTypes": ["topology"], "hasCode": true, "hasQuiz": true }
+    {
+      "slug": "01-installation",
+      "title": "Installing Ray & Ray Data",
+      "description": "pip install, version management, and environment setup",
+      "estimatedMinutes": 8,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-first-program",
+      "title": "Your First Ray Program",
+      "description": "ray.init(), hello world tasks, and verifying your cluster",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-first-pipeline",
+      "title": "Your First Data Pipeline",
+      "description": "Read, transform, and write data with Ray Data in 10 lines",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
   ]
 }

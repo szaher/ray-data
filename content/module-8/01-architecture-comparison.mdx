@@ -1,0 +1,196 @@
+---
+title: "Architecture: Ray vs Spark"
+quiz:
+  - question: "What is the fundamental difference between Spark's and Ray's execution models?"
+    options:
+      - "Spark uses Python while Ray uses Java"
+      - "Spark executes stage-based DAGs with barriers between stages, while Ray executes a dynamic task graph with streaming"
+      - "Ray requires HDFS while Spark does not"
+      - "Spark is single-threaded while Ray is multi-threaded"
+    correctIndex: 1
+    explanation: "Spark divides computation into stages separated by shuffle barriers — all tasks in a stage must complete before the next begins. Ray uses a dynamic task graph where tasks stream results to downstream consumers as soon as they finish, enabling pipelining without artificial barriers."
+  - question: "How does Ray's Object Store differ from Spark's memory model?"
+    options:
+      - "Ray stores all data on disk, Spark stores all data in memory"
+      - "Ray uses shared memory via Apache Arrow for zero-copy access across workers on a node, while Spark uses per-executor JVM heap memory with serialization between processes"
+      - "Spark uses more memory than Ray in every scenario"
+      - "There is no difference — both use JVM heap memory"
+    correctIndex: 1
+    explanation: "Ray's Object Store uses shared memory (built on Apache Arrow/Plasma) allowing multiple workers on the same node to read data via memory-mapping without copying. Spark stores data in per-executor JVM heap (and off-heap) memory, requiring serialization when data moves between executors or stages."
+---
+
+## Two Giants, Different Origins
+
+Apache Spark and Ray were born to solve different problems. Spark (2009, UC Berkeley AMPLab) was built for large-scale data processing — MapReduce done right. Ray (2017, UC Berkeley RISELab) was built for distributed Python applications, especially reinforcement learning and ML workloads. Understanding their architectural differences explains when each one shines.
+
+## The Driver-Worker Model
+
+Both frameworks follow a driver-worker pattern, but the internals diverge significantly.
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Apache Spark Architecture"
+        SD[Spark Driver] --> SC[SparkContext]
+        SC --> CM[Cluster Manager\nYARN / Mesos / K8s]
+        CM --> E1[Executor 1\nJVM Process]
+        CM --> E2[Executor 2\nJVM Process]
+        CM --> E3[Executor 3\nJVM Process]
+        E1 --> T1[Task] & T2[Task]
+        E2 --> T3[Task] & T4[Task]
+        E3 --> T5[Task] & T6[Task]
+    end
+    style SD fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style SC fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style CM fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style E1 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style E2 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style E3 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style T1 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style T2 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style T3 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style T4 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style T5 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style T6 fill:#242734,stroke:#fc8181,color:#e0e0e0
+`} />
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Ray Architecture"
+        RD[Ray Driver] --> GCS[Global Control Store]
+        GCS --> R1[Raylet\nNode 1]
+        GCS --> R2[Raylet\nNode 2]
+        GCS --> R3[Raylet\nNode 3]
+        R1 --> W1[Worker 1\nPython] & W2[Worker 2\nPython]
+        R2 --> W3[Worker 3\nPython] & W4[Worker 4\nPython]
+        R3 --> W5[Worker 5\nPython] & W6[Worker 6\nPython]
+        R1 --> OS1[Object Store]
+        R2 --> OS2[Object Store]
+        R3 --> OS3[Object Store]
+    end
+    style RD fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style GCS fill:#68d391,stroke:#68d391,color:#1a1d27
+    style R1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style R2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style R3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style W1 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W2 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W3 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W4 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W5 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style W6 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style OS1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style OS2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style OS3 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+**Spark** runs on the JVM. The driver creates a SparkContext that communicates with a cluster manager (YARN, Mesos, or Kubernetes) to launch executor JVM processes. Each executor runs tasks as threads within its JVM. This is powerful for JVM-native workloads but introduces overhead for Python: PySpark tasks must serialize data between the JVM and a Python subprocess via a socket.
+
+**Ray** is Python-native. The driver connects to the Global Control Store (GCS), which coordinates raylets — one per node. Each raylet manages local worker processes (actual Python processes) and a shared-memory object store. There is no JVM in the critical path.
+
+## Execution Models: Stages vs Task Graphs
+
+This is the deepest architectural difference and it affects everything from latency to resource utilization.
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Spark: Stage-Based DAG"
+        S1[Stage 1\nMap] -->|"shuffle\nbarrier"| S2[Stage 2\nReduce]
+        S2 -->|"shuffle\nbarrier"| S3[Stage 3\nFinal Agg]
+    end
+    subgraph "Ray: Streaming Task Graph"
+        T1[Read Block 1] --> T3[Map Block 1] --> T5[Write Block 1]
+        T2[Read Block 2] --> T4[Map Block 2] --> T6[Write Block 2]
+    end
+    style S1 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style S2 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style S3 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style T1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style T2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style T3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style T4 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style T5 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style T6 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+**Spark's stage-based DAG**: The Catalyst optimizer analyzes your logical plan, applies optimization rules (predicate pushdown, column pruning, join reordering), and produces a physical plan divided into stages. Within a stage, tasks run in parallel. But between stages, a **shuffle barrier** forces all tasks to complete before the next stage begins. This simplifies fault tolerance (just replay a stage) but introduces latency and forces materialization of intermediate data.
+
+**Ray's streaming task graph**: Ray Data schedules tasks in a streaming fashion. Block 1 can be read, mapped, and written while Block 2 is still being read. There are no global barriers unless you explicitly force a materialization (like a sort or groupby). This means lower memory footprint and better pipeline utilization, but it also means the scheduler is doing more work at runtime.
+
+## Memory Models
+
+Memory management is where Spark and Ray make fundamentally different tradeoffs.
+
+**Spark's JVM Memory Layout:**
+- **Execution memory**: shuffles, joins, sorts, aggregations
+- **Storage memory**: cached RDDs/DataFrames (managed by a unified memory manager that can borrow between execution and storage)
+- **Off-heap memory**: optional, for Tungsten binary storage that avoids GC pressure
+- PySpark adds another layer: data must cross the JVM-Python boundary via Arrow serialization
+
+**Ray's Shared-Memory Object Store:**
+- Built on Apache Arrow / Plasma
+- Each node has a shared-memory region (default 30% of RAM)
+- Workers on the same node read objects via memory-mapped files — true zero-copy access
+- No JVM, no garbage collection pauses, no Tungsten encoding
+- Data is stored in Arrow columnar format natively
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Spark Executor Memory"
+        JH[JVM Heap] --> EM[Execution Memory\nShuffles, Joins]
+        JH --> SM[Storage Memory\nCached DataFrames]
+        JH --> UM[User Memory\nUDFs, Metadata]
+        OH[Off-Heap\nTungsten] --> JH
+        PY[Python Subprocess] ---|"Arrow\nserialization"| JH
+    end
+    subgraph "Ray Worker Memory"
+        OS[Shared Object Store\nApache Arrow / Plasma]
+        WP1[Worker Process 1] ---|"mmap\nzero-copy"| OS
+        WP2[Worker Process 2] ---|"mmap\nzero-copy"| OS
+        WP3[Worker Process 3] ---|"mmap\nzero-copy"| OS
+    end
+    style JH fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style EM fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style SM fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style UM fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style OH fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style PY fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style OS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style WP1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style WP2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style WP3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+`} />
+
+## The Optimizer Question
+
+Spark's **Catalyst optimizer** is arguably its greatest engineering achievement. It applies dozens of optimization rules to your query plan before a single byte of data moves. Predicate pushdown, constant folding, join reordering, column pruning — all happen automatically. If you write `df.filter(...).select(...)`, Catalyst may push the filter below the select to reduce data early.
+
+Ray Data has no equivalent general-purpose optimizer. It applies some basic optimizations (operator fusion for adjacent map operations, read-compute overlap), but it relies on you to write efficient pipelines. This is a genuine tradeoff: Spark's optimizer handles naive queries gracefully, while Ray Data rewards — and sometimes requires — deliberate pipeline design.
+
+## When JVM Overhead Matters
+
+The JVM is both Spark's strength and its tax. The overhead shows up in three places:
+
+1. **Startup time**: JVM initialization adds 5-15 seconds before any work begins. Ray workers start in under a second.
+2. **Garbage collection**: Large heap sizes trigger GC pauses that stall all threads in an executor. Ray's object store uses reference counting with no GC.
+3. **Python interop**: PySpark routes Python UDFs through a JVM-to-Python bridge. Each row (or batch) crosses a serialization boundary. Ray workers are native Python processes — your UDF runs directly.
+
+For SQL-heavy batch analytics with few UDFs, Spark's JVM overhead is negligible. For Python-heavy ML pipelines with custom transforms on every row, the overhead compounds.
+
+## When Python-Native Wins
+
+Ray's architecture gives clear advantages when:
+
+- Your workload is primarily Python functions applied to data
+- You need GPU access (Ray workers are processes with direct GPU binding)
+- You want to mix data processing with model training or serving in one cluster
+- Low-latency per-task scheduling matters (Ray schedules a task in microseconds, Spark in milliseconds)
+- You are building heterogeneous pipelines (different resource requirements per stage)
+
+## When Spark's Design Wins
+
+Spark's architecture gives clear advantages when:
+
+- You need SQL-first analytics with complex joins and aggregations
+- Your organization has existing Hive metastore / data catalog integrations
+- You need mature data governance (Delta Lake, Iceberg, table ACLs)
+- Your team includes analysts who write SQL, not Python
+- Fault tolerance at the stage level is important for very long-running jobs
+- You are processing multi-petabyte datasets where Catalyst's optimization rules save hours of compute
+
+Neither architecture is universally better. They optimize for different workloads, and understanding the tradeoffs lets you pick the right tool — or combine both.

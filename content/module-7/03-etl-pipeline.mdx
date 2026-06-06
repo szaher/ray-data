@@ -1,0 +1,96 @@
+---
+title: "ETL Pipeline"
+quiz:
+  - question: "How does Ray Data handle joining two datasets that differ in size?"
+    options:
+      - "It drops rows that do not match"
+      - "It broadcasts the smaller dataset and uses map_batches to perform the lookup"
+      - "It requires both datasets to be exactly the same size"
+      - "Joins are not possible in Ray Data"
+    correctIndex: 1
+    explanation: "Ray Data lacks built-in SQL-style joins. The standard pattern is to materialize the small lookup table as a dict and reference it in map_batches — an efficient broadcast-join."
+  - question: "What is the benefit of write_parquet with partition_cols in an ETL pipeline?"
+    options:
+      - "It compresses files to zero bytes"
+      - "Downstream queries skip irrelevant partitions, reading only needed data"
+      - "It converts Parquet to CSV automatically"
+      - "Partitioning is required by the Parquet format"
+    correctIndex: 1
+    explanation: "Partition pruning lets query engines skip entire file groups that don't match filter predicates — dramatically reducing I/O for selective queries."
+---
+
+## Building a Production ETL Pipeline
+
+ETL is the bread and butter of data engineering. Ray Data excels here because it streams data without materializing entire datasets in memory.
+
+<MermaidDiagram chart={`graph LR
+    A[Read Events\nParquet] --> C[Clean & Validate]
+    B[Read Users\nCSV] --> D[Broadcast Lookup]
+    C --> E[Enrich: Join Users]
+    D --> E
+    E --> F[Write Partitioned\nParquet]
+    style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E fill:#68d391,stroke:#68d391,color:#1a1d27
+    style F fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Step 1 — Extract from Multiple Sources
+
+<CodeBlock language="python" code={`import ray
+
+events = ray.data.read_parquet("s3://datalake/raw/events/2025-06/")
+
+# Materialize small lookup table for broadcast join
+users_list = ray.data.read_csv("s3://datalake/dim/users.csv").take_all()
+user_lookup = {u["user_id"]: u for u in users_list}
+`} />
+
+## Step 2 — Clean, Validate, Enrich
+
+<CodeBlock language="python" code={`import numpy as np
+
+def clean(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    mask = batch["user_id"] != b""
+    batch = {k: v[mask] for k, v in batch.items()}
+    batch["event_type"] = np.array([e.decode().lower() for e in batch["event_type"]])
+    return batch
+
+def enrich(batch: dict) -> dict:
+    countries, segments = [], []
+    for uid in batch["user_id"]:
+        user = user_lookup.get(uid.decode(), {})
+        countries.append(user.get("country", "unknown"))
+        segments.append(user.get("segment", "unknown"))
+    batch["country"] = countries
+    batch["segment"] = segments
+    return batch
+
+events = events.map_batches(clean, batch_format="numpy")
+events = events.map_batches(enrich, batch_format="numpy")
+`} />
+
+## Step 3 — Write Partitioned Output
+
+<CodeBlock language="python" code={`def add_date_partition(batch: dict) -> dict:
+    batch["date"] = np.array([ts.decode()[:10] for ts in batch["timestamp"]])
+    return batch
+
+events = events.map_batches(add_date_partition, batch_format="numpy")
+events.write_parquet("s3://datalake/curated/events/", partition_cols=["date", "country"])
+`} />
+
+## Data Flow
+
+<MermaidDiagram chart={`graph TD
+    RAW["Raw Zone\ns3://datalake/raw/"] --> PIPE["Ray Data Pipeline\nClean -> Enrich -> Partition"]
+    DIM["Dimension Tables\ns3://datalake/dim/"] --> PIPE
+    PIPE --> CURATED["Curated Zone\nPartitioned by date & country"]
+    style RAW fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style DIM fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style PIPE fill:#68d391,stroke:#68d391,color:#1a1d27
+    style CURATED fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+Key takeaways: use the **broadcast-join pattern** (materialize small table, reference in `map_batches`) for enrichment; use **partition_cols** on write to enable downstream partition pruning.

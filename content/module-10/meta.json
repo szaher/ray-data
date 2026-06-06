@@ -1,0 +1,65 @@
+{
+  "id": 10,
+  "title": "Integrations & Ecosystem",
+  "description": "Connect Ray Data to cloud storage, data lakes, ML frameworks, and orchestrators",
+  "color": "#63b3ed",
+  "lessons": [
+    {
+      "slug": "01-cloud-storage",
+      "title": "Cloud Storage: S3, GCS & Azure",
+      "description": "Reading and writing data from AWS S3, Google Cloud Storage, and Azure Blob",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-data-lakes",
+      "title": "Data Lakes: Delta Lake & Iceberg",
+      "description": "Integration with Delta Lake, Apache Iceberg, and Hudi for lakehouse patterns",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "architecture",
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-databases-warehouses",
+      "title": "Databases & Warehouses",
+      "description": "Connecting to PostgreSQL, MongoDB, BigQuery, Snowflake, and Redshift",
+      "estimatedMinutes": 12,
+      "diagramTypes": [
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-ml-frameworks",
+      "title": "ML Frameworks: PyTorch, TF & HuggingFace",
+      "description": "Feeding Ray Data pipelines into training and inference with ML frameworks",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "data-flow",
+        "architecture"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "05-orchestration",
+      "title": "Orchestration: Airflow, Prefect & Dagster",
+      "description": "Scheduling and orchestrating Ray Data pipelines with workflow engines",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "flowchart"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
+  ]
+}

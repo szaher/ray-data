@@ -1,13 +1,68 @@
 {
   "id": 6,
-  "title": "Real-World Projects",
-  "description": "Complete end-to-end projects tying together multiple concepts",
-  "color": "#ecc94b",
+  "title": "Advanced",
+  "description": "Internals: execution plans, memory, custom datasources, fault tolerance",
+  "color": "#fc8181",
   "lessons": [
-    { "slug": "01-image-pipeline", "title": "Image Processing Pipeline", "description": "Read, resize, augment, infer, write", "estimatedMinutes": 25, "diagramTypes": ["pipeline", "architecture"], "hasCode": true, "hasQuiz": false },
-    { "slug": "02-llm-batch-inference", "title": "LLM Batch Inference", "description": "GPU actors processing text at scale", "estimatedMinutes": 25, "diagramTypes": ["pipeline", "resource"], "hasCode": true, "hasQuiz": false },
-    { "slug": "03-etl-pipeline", "title": "ETL Pipeline", "description": "Parquet to transformed partitioned output", "estimatedMinutes": 20, "diagramTypes": ["pipeline", "data-flow"], "hasCode": true, "hasQuiz": false },
-    { "slug": "04-serve-online", "title": "Ray Data + Ray Serve Online", "description": "Real-time inference endpoint", "estimatedMinutes": 25, "diagramTypes": ["deployment", "pipeline"], "hasCode": true, "hasQuiz": false },
-    { "slug": "05-performance-benchmarking", "title": "Performance Benchmarking", "description": "Compare approaches, measure throughput", "estimatedMinutes": 20, "diagramTypes": ["chart", "comparison"], "hasCode": true, "hasQuiz": false }
+    {
+      "slug": "01-execution-plans",
+      "title": "Execution Plans & Operator Fusion",
+      "description": "Logical vs physical plans, optimization rules",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "tree",
+        "optimization"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "02-memory-management",
+      "title": "Memory Management",
+      "description": "Block sizes, backpressure, tuning knobs",
+      "estimatedMinutes": 18,
+      "diagramTypes": [
+        "memory",
+        "tuning"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "03-custom-datasources",
+      "title": "Custom Datasources",
+      "description": "Writing your own Datasource",
+      "estimatedMinutes": 20,
+      "diagramTypes": [
+        "interface",
+        "data-flow"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "04-fault-tolerance",
+      "title": "Fault Tolerance & Lineage",
+      "description": "Task retries and object reconstruction",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "lineage",
+        "recovery"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    },
+    {
+      "slug": "05-shuffles-aggregations",
+      "title": "Shuffles & Aggregations",
+      "description": "sort, groupby, repartition",
+      "estimatedMinutes": 15,
+      "diagramTypes": [
+        "shuffle",
+        "comparison"
+      ],
+      "hasCode": true,
+      "hasQuiz": true
+    }
   ]
 }

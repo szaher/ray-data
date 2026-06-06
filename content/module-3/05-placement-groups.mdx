@@ -1,0 +1,142 @@
+---
+title: "Placement Groups & Resources"
+quiz:
+  - question: "When should you use the SPREAD scheduling strategy?"
+    options:
+      - "When tasks need to share GPU memory"
+      - "When you want maximum fault tolerance by distributing bundles across distinct nodes"
+      - "When tasks must all run on the same machine"
+      - "When you want to minimize the number of nodes used"
+    correctIndex: 1
+    explanation: "SPREAD distributes bundles across as many different nodes as possible. This maximizes fault tolerance — if one node fails, only a fraction of your work is affected."
+  - question: "What is a custom resource in Ray?"
+    options:
+      - "A physical hardware device that Ray auto-detects"
+      - "A user-defined label with a numeric capacity, used to control scheduling without Ray verifying the actual hardware"
+      - "A type of GPU that Ray manages"
+      - "A reserved section of the object store"
+    correctIndex: 1
+    explanation: "Custom resources are arbitrary labels (like 'special_hardware' or 'region:us-east') with numeric capacities. Ray uses them for scheduling decisions but does not verify the underlying hardware — they are a logical abstraction."
+---
+
+## Custom Resources
+
+Beyond CPUs and GPUs, Ray lets you define **custom resources** — arbitrary labels that control where tasks and actors run. Ray does not verify these labels; they are a scheduling contract.
+
+<CodeBlock language="python" code={`# Start Ray with custom resources
+ray.init(resources={"special_hardware": 2, "region:us-east": 1})
+
+# Task that requires the custom resource
+@ray.remote(resources={"special_hardware": 1})
+def use_special_hardware(data):
+    # Ray ensures this runs on a node with 'special_hardware'
+    return process(data)
+
+# Only scheduled on nodes that have 'special_hardware' available
+ref = use_special_hardware.remote(my_data)
+`} />
+
+Custom resources are useful for routing work to nodes with specific hardware (FPGAs, high-memory machines) or logical attributes (availability zone, data locality).
+
+## What Are Placement Groups?
+
+A **placement group** reserves a set of resources (called **bundles**) across the cluster as a unit. You decide _how_ those bundles are distributed using a **scheduling strategy**.
+
+Think of it as reserving a block of hotel rooms: you can request them all on the same floor (PACK), spread across floors (SPREAD), or strictly one per floor (STRICT_SPREAD).
+
+<MermaidDiagram chart={`graph TD
+    PG[Placement Group\n3 Bundles x 2 CPUs] --> S{Strategy?}
+    S -->|PACK| N1["Node 1\n[B1][B2][B3]\nAll together"]
+    S -->|SPREAD| N2["Node 1: [B1]\nNode 2: [B2]\nNode 3: [B3]"]
+    S -->|STRICT_SPREAD| N3["Node 1: [B1]\nNode 2: [B2]\nNode 3: [B3]\nFails if < 3 nodes"]
+    style PG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style N1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style N2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style N3 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Scheduling Strategies
+
+| Strategy | Behavior | Use Case |
+|---|---|---|
+| **PACK** | Fit bundles onto as few nodes as possible | Minimize inter-node communication |
+| **SPREAD** | Distribute bundles across different nodes | Fault tolerance, load balancing |
+| **STRICT_PACK** | All bundles must be on one node — fail otherwise | Gang scheduling on single node |
+| **STRICT_SPREAD** | Each bundle on a unique node — fail otherwise | Guaranteed isolation |
+
+## Creating and Using Placement Groups
+
+<CodeBlock language="python" code={`from ray.util.placement_group import placement_group, remove_placement_group
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
+# Define bundles: each is a resource dict
+bundles = [
+    {"CPU": 2, "GPU": 1},  # Bundle 0
+    {"CPU": 2, "GPU": 1},  # Bundle 1
+    {"CPU": 2, "GPU": 1},  # Bundle 2
+]
+
+# Create placement group with SPREAD strategy
+pg = placement_group(bundles, strategy="SPREAD")
+
+# Wait for the resources to be reserved
+ray.get(pg.ready())
+
+# Schedule tasks into specific bundles
+@ray.remote(num_cpus=2, num_gpus=1)
+def train_shard(shard_id):
+    return f"Training shard {shard_id}"
+
+refs = []
+for i in range(3):
+    strategy = PlacementGroupSchedulingStrategy(
+        placement_group=pg,
+        placement_group_bundle_index=i,
+    )
+    ref = train_shard.options(scheduling_strategy=strategy).remote(i)
+    refs.append(ref)
+
+results = ray.get(refs)
+`} />
+
+## Real-World Example: Distributed Training
+
+Placement groups are essential for distributed training where each worker needs a GPU on a **separate** node to maximize aggregate memory bandwidth:
+
+<CodeBlock language="python" code={`# Reserve 4 GPUs across 4 different nodes
+bundles = [{"CPU": 4, "GPU": 1} for _ in range(4)]
+pg = placement_group(bundles, strategy="STRICT_SPREAD")
+ray.get(pg.ready())
+
+@ray.remote(num_cpus=4, num_gpus=1)
+class TrainWorker:
+    def __init__(self, rank):
+        self.rank = rank
+        # Each worker on its own node with its own GPU
+
+    def train_epoch(self, data_ref):
+        ...
+
+# Launch one worker per bundle
+workers = []
+for rank in range(4):
+    strategy = PlacementGroupSchedulingStrategy(
+        placement_group=pg,
+        placement_group_bundle_index=rank,
+    )
+    w = TrainWorker.options(scheduling_strategy=strategy).remote(rank)
+    workers.append(w)
+`} />
+
+## Cleanup
+
+Placement groups hold reserved resources. Always clean up when done:
+
+<CodeBlock language="python" code={`# Remove the placement group to release resources
+remove_placement_group(pg)
+
+# Placement groups are also removed when their creator exits
+`} />
+
+Placement groups and custom resources give you precise control over **where** your computation runs — critical for performance-sensitive workloads like distributed training, latency-sensitive serving, and multi-tenant clusters.

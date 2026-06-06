@@ -1,0 +1,377 @@
+---
+title: "Orchestration: Airflow, Prefect & Dagster"
+quiz:
+  - question: "What is the recommended way to run a Ray Data pipeline from Apache Airflow in a production Kubernetes environment?"
+    options:
+      - "Use a BashOperator to call 'python my_pipeline.py' directly on the Airflow worker"
+      - "Use the KubeRayOperator to submit a RayJob to a dedicated Ray cluster managed by KubeRay"
+      - "Embed the Ray pipeline inside a PythonOperator and call ray.init() on the Airflow scheduler"
+      - "Use Airflow's built-in Spark integration to run Ray tasks"
+    correctIndex: 1
+    explanation: "The KubeRayOperator submits a RayJob to a KubeRay-managed cluster, keeping the Ray workload isolated from Airflow infrastructure. The Airflow worker only submits and monitors the job -- it does not run Ray tasks itself, which prevents resource contention and keeps the pipeline scalable."
+  - question: "Why is idempotency important when orchestrating Ray Data pipelines?"
+    options:
+      - "Because Ray Data pipelines always produce different results on each run"
+      - "Because orchestrators may retry failed tasks, and idempotent pipelines produce the same output regardless of how many times they run"
+      - "Because idempotent pipelines run faster than non-idempotent ones"
+      - "Because Ray requires idempotent functions for serialization"
+    correctIndex: 1
+    explanation: "Orchestrators like Airflow, Prefect, and Dagster automatically retry failed tasks. If a pipeline is idempotent -- meaning running it twice with the same input produces the same output -- retries are safe. Without idempotency, retries can cause duplicate data, corrupted state, or incorrect results."
+---
+
+## Why Orchestrate Ray Data Pipelines?
+
+Ray Data pipelines run great interactively, but production workloads need **scheduling**, **dependency management**, **retries**, **alerting**, and **observability**. That is where orchestrators come in. They answer questions like: "Run this pipeline every night at 2 AM, but only after the upstream data lands."
+
+<MermaidDiagram chart={`graph TB
+    subgraph "Orchestrator"
+        SCHED["Scheduler\n(cron / event trigger)"]
+        SCHED --> T1["Task 1:\nExtract"]
+        T1 --> T2["Task 2:\nRay Data Pipeline"]
+        T2 --> T3["Task 3:\nValidate & Notify"]
+    end
+    subgraph "Ray Cluster"
+        T2 --> RC["Ray Head Node"]
+        RC --> W1["Worker 1"]
+        RC --> W2["Worker 2"]
+        RC --> W3["Worker 3"]
+    end
+    subgraph "Storage"
+        W1 --> S3["s3://output/"]
+        W2 --> S3
+        W3 --> S3
+    end
+    style SCHED fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style T1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style T2 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style T3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style RC fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style W1 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style W2 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style W3 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style S3 fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
+`} />
+
+The orchestrator **does not run the data processing** -- it submits the job to a Ray cluster and monitors its progress. This separation keeps your orchestrator lightweight and your data processing scalable.
+
+## Apache Airflow
+
+Airflow is the most widely used pipeline orchestrator. There are two main patterns for running Ray Data pipelines from Airflow.
+
+### Pattern 1: RayDecoratedOperator
+
+The `ray-provider` package for Airflow lets you decorate Python functions to run on a Ray cluster.
+
+<CodeBlock language="bash" code={`pip install astro-provider-ray`} language="bash" filename="install_ray_provider.sh" />
+
+<CodeBlock language="python" code={`from airflow.decorators import dag, task
+from ray_provider.decorators.ray import ray_task
+from datetime import datetime
+@dag(
+    schedule="0 2 * * *",  # daily at 2 AM
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+    tags=["ray-data", "etl"],
+)
+def daily_feature_pipeline():
+    @task
+    def check_source_data():
+        """Verify upstream data has landed."""
+        import boto3
+        s3 = boto3.client("s3")
+        response = s3.list_objects_v2(
+            Bucket="YOUR_BUCKET",
+            Prefix="raw/events/{{ ds }}/",
+        )
+        file_count = response.get("KeyCount", 0)
+        if file_count == 0:
+            raise ValueError(f"No source files found for {{ ds }}")
+        return file_count
+    @ray_task(
+        ray_conn_id="ray_cluster_prod",
+        num_cpus=2,
+        runtime_env={"pip": ["pyarrow", "pandas"]},
+    )
+    def run_ray_pipeline(file_count: int, **context):
+        """Process data on the Ray cluster."""
+        import ray
+        ds_date = context["ds"]
+        ds = ray.data.read_parquet(
+            f"s3://YOUR_BUCKET/raw/events/{ds_date}/"
+        )
+        # Transform
+        ds = ds.filter(lambda row: row["event_type"] != "heartbeat")
+        ds = ds.map_batches(
+            lambda batch: batch.assign(
+                processed_at=ds_date
+            ),
+            batch_format="pandas",
+        )
+        # Write output
+        output_path = f"s3://YOUR_BUCKET/processed/events/{ds_date}/"
+        ds.write_parquet(output_path)
+        return {"rows": ds.count(), "output": output_path}
+    @task
+    def notify_completion(result):
+        """Send notification on success."""
+        print(f"Pipeline complete: {result['rows']} rows -> {result['output']}")
+    file_count = check_source_data()
+    result = run_ray_pipeline(file_count)
+    notify_completion(result)
+daily_feature_pipeline()`} language="python" filename="airflow_dag.py" />
+
+### Pattern 2: KubeRayOperator
+
+For Kubernetes-based deployments, the `KubeRayOperator` submits a `RayJob` custom resource to a KubeRay-managed cluster. This is the recommended approach for production.
+
+<CodeBlock language="python" code={`from airflow import DAG
+from ray_provider.operators.ray import SubmitRayJob
+from datetime import datetime
+with DAG(
+    dag_id="ray_data_kuberay_pipeline",
+    schedule="0 3 * * *",
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+) as dag:
+    submit_ray_job = SubmitRayJob(
+        task_id="run_feature_pipeline",
+        conn_id="ray_kuberay_prod",
+        entrypoint="python /app/feature_pipeline.py --date {{ ds }}",
+        runtime_env={
+            "working_dir": "s3://YOUR_BUCKET/ray-jobs/feature_pipeline/",
+            "pip": ["pyarrow>=14.0", "pandas>=2.0"],
+        },
+        num_cpus=2,
+        num_gpus=0,
+        # KubeRay cluster configuration
+        xcom_task_key="ray_job_response",
+        poll_interval=30,  # check job status every 30 seconds
+        fetch_logs=True,
+    )`} language="python" filename="airflow_kuberay.py" />
+
+## Prefect
+
+Prefect takes a code-first approach to orchestration. Ray Data pipelines integrate through Prefect's task and flow decorators.
+
+<CodeBlock language="python" code={`from prefect import flow, task, get_run_logger
+from prefect_ray import RayTaskRunner
+from datetime import date
+@task
+def validate_source(ds_date: str) -> int:
+    """Check that source data exists."""
+    import boto3
+    s3 = boto3.client("s3")
+    response = s3.list_objects_v2(
+        Bucket="YOUR_BUCKET",
+        Prefix=f"raw/events/{ds_date}/",
+    )
+    count = response.get("KeyCount", 0)
+    if count == 0:
+        raise ValueError(f"No data for {ds_date}")
+    return count
+@task
+def run_pipeline(ds_date: str) -> dict:
+    """Execute the Ray Data pipeline."""
+    import ray
+    ray.init(address="ray://YOUR_RAY_CLUSTER:10001")
+    ds = ray.data.read_parquet(f"s3://YOUR_BUCKET/raw/events/{ds_date}/")
+    # Transform
+    ds = ds.filter(lambda row: row["status"] == "completed")
+    ds = ds.map(lambda row: {
+        **row,
+        "revenue_usd": row["amount"] * row["exchange_rate"],
+    })
+    output_path = f"s3://YOUR_BUCKET/processed/{ds_date}/"
+    ds.write_parquet(output_path)
+    row_count = ds.count()
+    ray.shutdown()
+    return {"rows": row_count, "path": output_path}
+@task
+def record_metrics(result: dict):
+    """Log pipeline metrics."""
+    logger = get_run_logger()
+    logger.info(f"Processed {result['rows']} rows -> {result['path']}")
+@flow(
+    name="daily-feature-pipeline",
+    task_runner=RayTaskRunner(
+        address="ray://YOUR_RAY_CLUSTER:10001",
+    ),
+)
+def daily_pipeline(ds_date: str = None):
+    if ds_date is None:
+        ds_date = date.today().isoformat()
+    file_count = validate_source(ds_date)
+    result = run_pipeline(ds_date)
+    record_metrics(result)
+    return result
+# Run locally
+if __name__ == "__main__":
+    daily_pipeline()`} language="python" filename="prefect_flow.py" />
+
+### Scheduling with Prefect
+
+<CodeBlock language="python" code={`from prefect.deployments import Deployment
+from prefect.server.schemas.schedules import CronSchedule
+# Deploy with a cron schedule
+deployment = Deployment.build_from_flow(
+    flow=daily_pipeline,
+    name="daily-feature-pipeline-prod",
+    schedule=CronSchedule(cron="0 2 * * *", timezone="UTC"),
+    work_queue_name="data-pipelines",
+    parameters={"ds_date": None},  # uses today's date
+    tags=["ray-data", "production"],
+)
+deployment.apply()`} language="python" filename="prefect_deploy.py" />
+
+## Dagster
+
+Dagster uses a **software-defined asset** model where you define the data assets your pipeline produces. This pairs well with Ray Data's dataset abstraction.
+
+<CodeBlock language="python" code={`from dagster import (
+    asset,
+    AssetExecutionContext,
+    Definitions,
+    ScheduleDefinition,
+    define_asset_job,
+)
+import ray
+@asset(
+    group_name="feature_pipeline",
+    description="Raw events filtered and enriched",
+)
+def processed_events(context: AssetExecutionContext):
+    """Read raw events, filter, and write processed output."""
+    ds_date = context.partition_key if context.has_partition_key else "2024-06-01"
+    ray.init(address="ray://YOUR_RAY_CLUSTER:10001", ignore_reinit_error=True)
+    ds = ray.data.read_parquet(f"s3://YOUR_BUCKET/raw/events/{ds_date}/")
+    # Transform
+    ds = ds.filter(lambda row: row["event_type"] != "heartbeat")
+    ds = ds.map_batches(
+        lambda batch: batch.assign(
+            processed_date=ds_date,
+            is_valid=batch["amount"] > 0,
+        ),
+        batch_format="pandas",
+    )
+    output_path = f"s3://YOUR_BUCKET/processed/events/{ds_date}/"
+    ds.write_parquet(output_path)
+    context.log.info(f"Wrote {ds.count()} rows to {output_path}")
+    ray.shutdown()
+    return output_path
+@asset(
+    group_name="feature_pipeline",
+    deps=[processed_events],
+    description="Aggregated daily metrics from processed events",
+)
+def daily_metrics(context: AssetExecutionContext):
+    """Aggregate processed events into daily metrics."""
+    ds_date = context.partition_key if context.has_partition_key else "2024-06-01"
+    ray.init(address="ray://YOUR_RAY_CLUSTER:10001", ignore_reinit_error=True)
+    ds = ray.data.read_parquet(
+        f"s3://YOUR_BUCKET/processed/events/{ds_date}/"
+    )
+    # Aggregate using map_batches with pandas
+    def compute_metrics(batch):
+        import pandas as pd
+        return pd.DataFrame([{
+            "date": ds_date,
+            "total_events": len(batch),
+            "total_revenue": batch["amount"].sum(),
+            "unique_users": batch["user_id"].nunique(),
+        }])
+    metrics = ds.map_batches(compute_metrics, batch_format="pandas")
+    output_path = f"s3://YOUR_BUCKET/metrics/{ds_date}/"
+    metrics.write_parquet(output_path)
+    context.log.info(f"Metrics written to {output_path}")
+    ray.shutdown()`} language="python" filename="dagster_assets.py" />
+
+### Dagster with @op (Operational Pattern)
+
+For pipelines that do not map cleanly to assets, Dagster's `@op` and `@job` decorators offer imperative control:
+
+<CodeBlock language="python" code={`from dagster import op, job, In, Out, String
+import ray
+@op(
+    ins={"ds_date": In(String)},
+    out=Out(String),
+)
+def extract_and_transform(context, ds_date: str) -> str:
+    """Run Ray Data ETL pipeline."""
+    ray.init(address="ray://YOUR_RAY_CLUSTER:10001", ignore_reinit_error=True)
+    ds = ray.data.read_parquet(f"s3://YOUR_BUCKET/raw/{ds_date}/")
+    ds = ds.filter(lambda row: row["status"] == "active")
+    output_path = f"s3://YOUR_BUCKET/transformed/{ds_date}/"
+    ds.write_parquet(output_path)
+    context.log.info(f"Wrote to {output_path}")
+    ray.shutdown()
+    return output_path
+@op(ins={"input_path": In(String)})
+def validate_output(context, input_path: str):
+    """Validate the pipeline output."""
+    ray.init(address="ray://YOUR_RAY_CLUSTER:10001", ignore_reinit_error=True)
+    ds = ray.data.read_parquet(input_path)
+    row_count = ds.count()
+    context.log.info(f"Validation: {row_count} rows in {input_path}")
+    assert row_count > 0, "Pipeline produced no output!"
+    ray.shutdown()
+@job
+def etl_pipeline():
+    output_path = extract_and_transform()
+    validate_output(output_path)`} language="python" filename="dagster_ops.py" />
+
+## Best Practices
+
+### Cluster Lifecycle Management
+
+<MermaidDiagram chart={`graph LR
+    subgraph "Option A: Long-lived Cluster"
+        A1["Ray Cluster\n(always running)"]
+        A2["Job 1"] --> A1
+        A3["Job 2"] --> A1
+        A4["Job 3"] --> A1
+    end
+    subgraph "Option B: Per-job Cluster"
+        B1["Orchestrator"] --> B2["Start Cluster"]
+        B2 --> B3["Run Pipeline"]
+        B3 --> B4["Shutdown Cluster"]
+    end
+    style A1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style A2 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style A3 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style A4 fill:#242734,stroke:#68d391,color:#e0e0e0
+    style B1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style B2 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
+    style B3 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style B4 fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+**Long-lived clusters** are ideal when you have frequent jobs and want to avoid startup latency. Use KubeRay with autoscaling to manage cost.
+
+**Per-job clusters** are better for infrequent, heavy workloads. The orchestrator spins up a cluster, runs the pipeline, and tears it down. No idle cost.
+
+### Idempotency
+
+Always design pipelines to be **idempotent** -- running the same pipeline twice with the same inputs should produce the same outputs. This is critical because orchestrators retry failed tasks.
+
+<CodeBlock language="python" code={`import ray
+def idempotent_pipeline(ds_date: str):
+    """An idempotent pipeline that safely handles retries."""
+    input_path = f"s3://YOUR_BUCKET/raw/{ds_date}/"
+    output_path = f"s3://YOUR_BUCKET/processed/{ds_date}/"
+    # Read from a fixed, immutable input
+    ds = ray.data.read_parquet(input_path)
+    # Deterministic transformations (no random state, no timestamps)
+    ds = ds.filter(lambda row: row["status"] == "valid")
+    ds = ds.map(lambda row: {
+        **row,
+        "pipeline_date": ds_date,  # fixed, not datetime.now()
+    })
+    # Overwrite output (not append) -- ensures retries produce the same result
+    ds.write_parquet(output_path)
+    return ds.count()`} language="python" filename="idempotent_pipeline.py" />
+
+**Key rules for idempotency:**
+- Use **overwrite** mode, not append, when writing output.
+- Derive output paths from input parameters (dates, partition keys), not from runtime timestamps.
+- Avoid side effects that accumulate (e.g., incrementing counters, sending duplicate notifications).
+- Use deterministic transformations -- avoid `random()` or `datetime.now()` inside map functions.

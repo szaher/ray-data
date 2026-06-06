@@ -1,0 +1,349 @@
+---
+title: "Common Errors & How to Fix Them"
+quiz:
+  - question: "What is the most likely cause of 'RaySystemError: Object store full'?"
+    options:
+      - "Ray is not installed correctly"
+      - "Too many large objects are stored in shared memory without being consumed or freed"
+      - "The cluster has too many nodes"
+      - "Python's garbage collector is disabled"
+    correctIndex: 1
+    explanation: "The object store is Ray's shared memory region. When datasets or intermediate results fill it faster than they are consumed or garbage collected, you get this error. Streaming execution and increasing object store size are the primary fixes."
+  - question: "When you see a 'TypeError: cannot pickle' error in Ray Data, what is the recommended fix?"
+    options:
+      - "Upgrade Python to a newer version"
+      - "Use JSON serialization instead"
+      - "Replace lambdas or closures with class-based transforms that initialize unpicklable resources in __init__"
+      - "Disable serialization with ray.init(serialize=False)"
+    correctIndex: 2
+    explanation: "Ray sends functions and data between workers using pickle. Unpicklable objects like database connections or file handles should be created inside a class __init__ method so they are initialized per-worker rather than serialized from the driver."
+---
+
+## The Top 10 Ray Data Errors
+
+Every Ray Data user hits errors. The good news: most errors fall into a small set of well-known patterns. This lesson walks through the 10 most common errors with their exact messages, root causes, and concrete fixes.
+
+<MermaidDiagram chart={`flowchart TD
+    E[Ray Data Error] --> E1[Import/Setup]
+    E --> E2[Memory]
+    E --> E3[Serialization]
+    E --> E4[Schema]
+    E --> E5[Execution]
+    E1 --> E1a["No module named ray"]
+    E1 --> E1b["Connection refused"]
+    E2 --> E2a["Object store full"]
+    E2 --> E2b["OutOfMemoryError"]
+    E3 --> E3a["Cannot pickle"]
+    E4 --> E4a["Schema mismatch"]
+    E5 --> E5a["RayTaskError"]
+    E5 --> E5b["Deadline exceeded"]
+    E5 --> E5c["No available nodes"]
+    E5 --> E5d["Block too large"]
+    style E fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style E1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style E2 fill:#242734,stroke:#f6ad55,color:#e0e0e0
+    style E3 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style E4 fill:#242734,stroke:#b794f4,color:#e0e0e0
+    style E5 fill:#242734,stroke:#68d391,color:#e0e0e0
+`} />
+
+---
+
+## 1. "No module named 'ray'"
+
+**The error:**
+
+<CodeBlock code={`Traceback (most recent call last):
+  File "pipeline.py", line 1, in <module>
+    import ray
+ModuleNotFoundError: No module named 'ray'`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Ray is not installed in your current Python environment.
+
+**The fix:**
+
+<CodeBlock code={`# Install Ray with data processing support
+pip install "ray[data]"
+# Verify the installation
+python -c "import ray; print(ray.__version__)"`} language="bash" filename="terminal" />
+
+If you are using a virtual environment or conda, make sure you activate it before installing and running your script.
+
+---
+
+## 2. "RaySystemError: Object store full"
+
+**The error:**
+
+<CodeBlock code={`ray.exceptions.RaySystemError: System error: Object store is full.
+Attempted to create an object of size 256.00 MiB but the object store
+is full with 8.00 GiB of objects. Consider increasing the object store
+memory with ray.init(object_store_memory=<bytes>).`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Ray stores intermediate data in the object store (shared memory). When your pipeline produces data faster than it is consumed, the object store fills up.
+
+**The fix:**
+
+<CodeBlock code={`import ray
+# Fix 1: Increase object store size (default is 30% of system memory)
+ray.init(object_store_memory=20 * 1024 * 1024 * 1024)  # 20 GB
+# Fix 2: Use streaming execution to avoid materializing everything
+ds = ray.data.read_parquet("s3://bucket/large-dataset/")
+# Process in streaming fashion — don't call ds.materialize() unless needed
+for batch in ds.iter_batches(batch_size=1024):
+    process(batch)
+# Fix 3: Delete references to datasets you no longer need
+del old_dataset`} language="python" filename="fix_object_store.py" />
+
+---
+
+## 3. "TypeError: cannot pickle"
+
+**The error:**
+
+<CodeBlock code={`TypeError: cannot pickle '_thread.lock' object
+# or
+TypeError: cannot pickle 'psycopg2.extensions.connection' object
+# or
+ray.exceptions.RayTaskError: TypeError: cannot pickle 'torch.Tensor' object`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Ray sends functions and data to workers using Python's pickle. Objects like database connections, file handles, locks, and some GPU tensors cannot be pickled.
+
+**The fix:**
+
+<CodeBlock code={`# BROKEN: Lambda captures the connection object
+import psycopg2
+conn = psycopg2.connect("postgresql://localhost/mydb")
+ds.map(lambda row: {"result": conn.execute(row["query"])})  # cannot pickle!
+# FIXED: Use a class-based transform — create the connection per worker
+class QueryDatabase:
+    def __init__(self):
+        import psycopg2
+        self.conn = psycopg2.connect("postgresql://localhost/mydb")
+    def __call__(self, row):
+        cursor = self.conn.cursor()
+        cursor.execute(row["query"])
+        return {"result": cursor.fetchone()}
+ds.map(QueryDatabase, concurrency=4)`} language="python" filename="fix_pickle.py" />
+
+---
+
+## 4. "ValueError: Schema mismatch"
+
+**The error:**
+
+<CodeBlock code={`ValueError: Schema mismatch between blocks:
+  Block 0 schema: {'text': string, 'label': int64}
+  Block 3 schema: {'text': string, 'label': string, 'score': float64}
+Expected consistent schema across all blocks.`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Your `map` or `map_batches` function returns different columns or different types for different rows. Ray Data requires a consistent schema across all blocks.
+
+**The fix:**
+
+<CodeBlock code={`# BROKEN: Some rows get extra columns or different types
+def process(row):
+    result = {"text": row["text"]}
+    if row.get("score"):
+        result["label"] = str(row["label"])  # string in some rows
+        result["score"] = row["score"]       # extra column in some rows
+    else:
+        result["label"] = row["label"]       # int in other rows
+    return result
+# FIXED: Always return the same columns with the same types
+def process(row):
+    return {
+        "text": row["text"],
+        "label": int(row["label"]),              # always int
+        "score": float(row.get("score", 0.0)),   # always present, always float
+    }`} language="python" filename="fix_schema.py" />
+
+---
+
+## 5. "RayTaskError" with Traceback
+
+**The error:**
+
+<CodeBlock code={`ray.exceptions.RayTaskError(ValueError): ray::MapBatches(process)()
+  File "pipeline.py", line 12, in process
+    return {"output": model.predict(batch["input"])}
+  File "model.py", line 45, in predict
+    raise ValueError("Input shape (3,) does not match expected (4,)")
+ValueError: Input shape (3,) does not match expected (4,)`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Your user function raised an exception inside a Ray worker. The traceback is wrapped in `RayTaskError` but the **real error** is the inner exception.
+
+**The fix:** Read the inner traceback. The actual error is `ValueError: Input shape (3,) does not match expected (4,)`. Debug it as you would any Python error.
+
+<CodeBlock code={`# Defensive approach: add error handling in your map function
+def safe_process(batch):
+    try:
+        return {"output": model.predict(batch["input"])}
+    except Exception as e:
+        # Log the failing input for debugging
+        print(f"Error processing batch: {e}")
+        print(f"Input shape: {batch['input'].shape}")
+        # Return a default or re-raise with more context
+        raise ValueError(
+            f"Failed on input shape {batch['input'].shape}: {e}"
+        ) from e
+ds = ds.map_batches(safe_process)`} language="python" filename="fix_task_error.py" />
+
+---
+
+## 6. "Deadline exceeded"
+
+**The error:**
+
+<CodeBlock code={`ray.exceptions.GetTimeoutError: The task MapBatches(process)
+exceeded the deadline of 300.0 seconds.`} language="python" filename="error_output.txt" />
+
+**Why it happens:** A single task is taking longer than the configured timeout. This often happens with large batch sizes or expensive per-row operations.
+
+**The fix:**
+
+<CodeBlock code={`# Fix 1: Reduce batch size so each task finishes faster
+ds = ds.map_batches(process, batch_size=256)   # was 4096
+# Fix 2: Increase the timeout if the work legitimately takes long
+import ray
+ray.data.DataContext.get_current().execution_options.resource_limits.timeout = 600
+# Fix 3: Optimize your function
+def process(batch):
+    # Use vectorized operations instead of row-by-row loops
+    batch["output"] = np.vectorize(transform)(batch["input"])
+    return batch`} language="python" filename="fix_timeout.py" />
+
+---
+
+## 7. "OutOfMemoryError"
+
+**The error:**
+
+<CodeBlock code={`ray.exceptions.OutOfMemoryError: Task was killed due to running
+out of memory. Memory usage on node: 15.2/16.0 GiB.
+Top memory consumers:
+  MapBatches(process): 8.5 GiB
+  Object store: 5.2 GiB`} language="python" filename="error_output.txt" />
+
+**Why it happens:** A worker is using more memory than the node has available. Common causes: loading large models per-worker, batch sizes too large, or data that expands significantly during processing.
+
+**The fix:**
+
+<CodeBlock code={`# Fix 1: Reduce batch size
+ds = ds.map_batches(process, batch_size=512)  # smaller batches = less memory
+# Fix 2: Limit concurrency to reduce parallel memory usage
+ds = ds.map_batches(process, concurrency=2)  # fewer workers = less total memory
+# Fix 3: Use ActorPoolStrategy to share a model across calls
+ds = ds.map_batches(
+    ModelProcessor,
+    concurrency=2,         # only 2 actors, each loads the model once
+    batch_size=256,
+)
+# Fix 4: Set memory budget for Ray Data
+ctx = ray.data.DataContext.get_current()
+ctx.execution_options.resource_limits.object_store_memory = 4 * 1024 * 1024 * 1024`} language="python" filename="fix_oom.py" />
+
+---
+
+## 8. "No available nodes"
+
+**The error:**
+
+<CodeBlock code={`ray.exceptions.NodeDiedError: No available nodes match the resource
+requirements: {'CPU': 4, 'GPU': 1}. Available resources: {'CPU': 8}.
+The task cannot be scheduled.`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Your task requests resources that no node in the cluster can satisfy, most often requesting GPUs when none are available.
+
+**The fix:**
+
+<CodeBlock code={`# Check what resources your cluster actually has
+print(ray.cluster_resources())
+# {'CPU': 8.0, 'memory': 16000000000.0, 'object_store_memory': 4000000000.0}
+# Fix: Match your resource requests to available resources
+ds = ds.map_batches(
+    process,
+    num_cpus=1,   # request only what you need
+    num_gpus=0,   # don't request GPUs if you don't have them
+)`} language="python" filename="fix_resources.py" />
+
+---
+
+## 9. "Connection refused"
+
+**The error:**
+
+<CodeBlock code={`ConnectionError: ray.init() failed. Could not connect to Ray
+at address 10.0.0.1:6379. Make sure the Ray head node is running
+and that the address is correct.
+Error: ConnectionRefusedError: [Errno 111] Connection refused`} language="python" filename="error_output.txt" />
+
+**Why it happens:** You are trying to connect to a remote Ray cluster that is either not running, has a different address, or has a firewall blocking the port.
+
+**The fix:**
+
+<CodeBlock code={`# Fix 1: Start a local cluster instead of connecting to a remote one
+ray.init()  # starts a local cluster automatically
+# Fix 2: Verify the cluster is running before connecting
+# On the head node:
+#   ray start --head --port=6379
+# Then connect:
+ray.init(address="ray://10.0.0.1:10001")
+# Fix 3: Check if Ray is already running locally
+import subprocess
+result = subprocess.run(["ray", "status"], capture_output=True, text=True)
+print(result.stdout)`} language="python" filename="fix_connection.py" />
+
+---
+
+## 10. "Block too large"
+
+**The error:**
+
+<CodeBlock code={`WARNING: Block size 2.5 GiB exceeds the configured target max block
+size of 512.0 MiB. This may lead to out-of-memory errors. Consider
+repartitioning to smaller blocks.`} language="python" filename="error_output.txt" />
+
+**Why it happens:** Some blocks (partitions) are disproportionately large. This can happen when reading from files of uneven sizes or after operations that concentrate data.
+
+**The fix:**
+
+<CodeBlock code={`# Fix 1: Repartition into more, smaller blocks
+ds = ray.data.read_parquet("s3://bucket/uneven-files/")
+ds = ds.repartition(100)  # split into 100 roughly equal blocks
+# Fix 2: Set target max block size
+ctx = ray.data.DataContext.get_current()
+ctx.target_max_block_size = 256 * 1024 * 1024  # 256 MB target
+# Fix 3: Repartition based on desired block count
+num_blocks = ds.num_blocks()
+print(f"Current blocks: {num_blocks}")
+ds = ds.repartition(num_blocks * 4)  # 4x more blocks = 4x smaller`} language="python" filename="fix_block_size.py" />
+
+---
+
+## Quick Reference Decision Tree
+
+When you hit an error, use this flow to narrow it down:
+
+<MermaidDiagram chart={`flowchart TD
+    A[Error Occurred] --> B{Can you import ray?}
+    B -->|No| C["pip install 'ray[data]'"]
+    B -->|Yes| D{Can you connect to cluster?}
+    D -->|No| E[Check ray start / address]
+    D -->|Yes| F{What type of error?}
+    F --> G[Memory Error]
+    F --> H[Serialization Error]
+    F --> I[Task Error]
+    F --> J[Schema Error]
+    G --> G1[Reduce batch size\nLimit concurrency\nIncrease object store]
+    H --> H1[Use class-based transforms\nAvoid lambdas with state]
+    I --> I1[Read inner traceback\nAdd error handling]
+    J --> J1[Return consistent columns\nand types from map functions]
+    style A fill:#fc8181,stroke:#fc8181,color:#1a1d27
+    style C fill:#68d391,stroke:#68d391,color:#1a1d27
+    style E fill:#68d391,stroke:#68d391,color:#1a1d27
+    style G1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style H1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style I1 fill:#68d391,stroke:#68d391,color:#1a1d27
+    style J1 fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />

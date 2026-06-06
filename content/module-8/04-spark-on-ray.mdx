@@ -1,0 +1,321 @@
+---
+title: "Spark on Ray (RayDP)"
+quiz:
+  - question: "What is the primary purpose of RayDP?"
+    options:
+      - "To replace Spark entirely with Ray"
+      - "To run PySpark on a Ray cluster, enabling Spark SQL and Ray ML workloads to share the same cluster and pass data without I/O"
+      - "To convert all Spark code to Ray Data automatically"
+      - "To add SQL support to Ray Data"
+    correctIndex: 1
+    explanation: "RayDP (Ray Data Processing) runs Spark executors as Ray actors on a Ray cluster. This lets you use Spark SQL for ETL and Ray for ML training on the same cluster, converting between Spark DataFrames and Ray Datasets in memory without writing intermediate data to disk."
+  - question: "How does RayDP run Spark executors?"
+    options:
+      - "It installs Spark on every node and runs it independently"
+      - "It converts Spark code to Ray tasks automatically"
+      - "It launches Spark executors as Ray actors, managed by Ray's scheduler and sharing Ray's cluster resources"
+      - "It runs Spark in a Docker container inside each Ray worker"
+    correctIndex: 2
+    explanation: "RayDP implements a custom Spark scheduler backend that launches each Spark executor as a Ray actor. This means Spark executors are managed by Ray's resource scheduler, share the same cluster, and can be co-located with Ray workers for efficient data transfer."
+---
+
+## The Best of Both Worlds
+
+What if you did not have to choose between Spark and Ray? What if you could run Spark SQL for the parts of your pipeline where it excels, and Ray for ML training and serving, on the same cluster, passing data between them without writing to disk?
+
+That is exactly what **RayDP** (Ray Data Processing) provides. It is an open-source library that runs Apache Spark on a Ray cluster by implementing Spark executors as Ray actors.
+
+## What is RayDP?
+
+RayDP is a thin integration layer that:
+
+1. Starts a Spark session that uses Ray as its cluster manager
+2. Launches Spark executors as Ray actors (not as standalone JVM processes)
+3. Enables zero-copy conversion between Spark DataFrames and Ray Datasets
+4. Shares cluster resources between Spark and Ray workloads
+
+<MermaidDiagram chart={`graph TD
+    subgraph "Ray Cluster"
+        GCS[Global Control Store]
+        subgraph "Node 1"
+            R1[Raylet] --> SE1[Spark Executor\nas Ray Actor]
+            R1 --> SE2[Spark Executor\nas Ray Actor]
+            R1 --> RW1[Ray Worker\nML Training]
+        end
+        subgraph "Node 2"
+            R2[Raylet] --> SE3[Spark Executor\nas Ray Actor]
+            R2 --> RW2[Ray Worker\nML Training]
+            R2 --> RW3[Ray Worker\nML Training]
+        end
+        GCS --> R1
+        GCS --> R2
+        SD[Spark Driver\nvia RayDP] --> SE1 & SE2 & SE3
+    end
+    style GCS fill:#68d391,stroke:#68d391,color:#1a1d27
+    style R1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style R2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style SE1 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style SE2 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style SE3 fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style RW1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style RW2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style RW3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style SD fill:#fc8181,stroke:#fc8181,color:#1a1d27
+`} />
+
+## Installation
+
+<CodeBlock language="bash" filename="install.sh" code={`# Install RayDP (requires Ray and PySpark)
+pip install raydp
+# Or with specific versions
+pip install raydp[spark32]  # For Spark 3.2.x
+pip install raydp[spark33]  # For Spark 3.3.x
+# Verify installation
+python -c "import raydp; print(raydp.__version__)"
+`} />
+
+RayDP requires a working Ray installation and a compatible PySpark version. It does not require a standalone Spark cluster — the whole point is that Ray provides the cluster.
+
+## Setting Up a Spark Session on Ray
+
+<CodeBlock language="python" filename="raydp_setup.py" code={`import ray
+import raydp
+# Step 1: Initialize Ray
+ray.init()
+# Step 2: Create a Spark session on Ray
+spark = raydp.init_spark(
+    app_name="spark_on_ray",
+    num_executors=4,           # Number of Spark executors (Ray actors)
+    executor_cores=4,          # CPU cores per executor
+    executor_memory="8g",      # Memory per executor
+    configs={
+        "spark.sql.adaptive.enabled": "true",
+        "spark.sql.shuffle.partitions": "200",
+    },
+)
+# Now use 'spark' like any normal SparkSession
+print(type(spark))  # <class 'pyspark.sql.session.SparkSession'>
+# When done, stop the Spark session (releases Ray actors)
+raydp.stop_spark()
+ray.shutdown()
+`} />
+
+The `raydp.init_spark()` function creates a standard PySpark `SparkSession`, but instead of connecting to YARN or a standalone Spark master, it launches Spark executors as Ray actors. You get a fully functional SparkSession with the same API, the same Catalyst optimizer, and the same Spark SQL support.
+
+## Running Spark SQL on Ray
+
+Once you have the session, all standard PySpark operations work normally.
+
+<CodeBlock language="python" filename="raydp_sql.py" code={`import ray
+import raydp
+ray.init()
+spark = raydp.init_spark("sql_demo", num_executors=2,
+                          executor_cores=2, executor_memory="4g")
+# Read data with Spark
+df = spark.read.parquet("s3://bucket/transactions/")
+# Create a temp view and run SQL
+df.createOrReplaceTempView("transactions")
+result = spark.sql("""
+    SELECT
+        customer_id,
+        COUNT(*) as num_transactions,
+        SUM(amount) as total_spend,
+        AVG(amount) as avg_spend,
+        MAX(transaction_date) as last_transaction
+    FROM transactions
+    WHERE status = 'completed'
+    GROUP BY customer_id
+    HAVING COUNT(*) >= 5
+    ORDER BY total_spend DESC
+""")
+result.show()
+# All Spark features work: joins, window functions, UDFs, etc.
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number, col
+window = Window.partitionBy("customer_id").orderBy(col("amount").desc())
+ranked = df.withColumn("rank", row_number().over(window))
+`} />
+
+## Converting Between Spark DataFrames and Ray Datasets
+
+This is where RayDP shines. You can move data between Spark and Ray without writing to disk.
+
+<CodeBlock language="python" filename="raydp_conversion.py" code={`import ray
+import raydp
+ray.init()
+spark = raydp.init_spark("conversion_demo", num_executors=2,
+                          executor_cores=2, executor_memory="4g")
+# --- Spark to Ray Dataset ---
+# Spark SQL for ETL
+spark_df = spark.read.parquet("s3://bucket/raw_data/")
+spark_df.createOrReplaceTempView("raw")
+cleaned = spark.sql("""
+    SELECT user_id, features, label
+    FROM raw
+    WHERE features IS NOT NULL AND label IS NOT NULL
+""")
+# Convert Spark DataFrame to Ray Dataset (in-memory transfer)
+ray_ds = raydp.spark.spark_dataframe_to_ray_dataset(cleaned)
+print(type(ray_ds))     # <class 'ray.data.dataset.Dataset'>
+print(ray_ds.schema())  # Arrow schema
+# --- Ray Dataset to Spark DataFrame ---
+# After processing in Ray, convert back to Spark
+processed_ds = ray_ds.map_batches(some_transform, batch_format="pandas")
+spark_df_back = raydp.spark.ray_dataset_to_spark_dataframe(
+    spark, processed_ds
+)
+spark_df_back.show()
+`} />
+
+The conversion uses Apache Arrow as the intermediate format. Data is transferred through Ray's object store, avoiding serialization to disk. For large datasets, this is significantly faster than writing Parquet as an intermediate format.
+
+## End-to-End Example: Spark ETL + Ray ML
+
+This is the canonical RayDP use case — Spark for data preparation, Ray for model training.
+
+<CodeBlock language="python" filename="raydp_e2e.py" code={`import ray
+import raydp
+from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
+ray.init()
+# --- Phase 1: Spark ETL ---
+spark = raydp.init_spark("etl_ml_pipeline", num_executors=4,
+                          executor_cores=4, executor_memory="8g")
+# Complex SQL that Spark handles well
+raw = spark.read.parquet("s3://datalake/events/")
+users = spark.read.parquet("s3://datalake/users/")
+raw.createOrReplaceTempView("events")
+users.createOrReplaceTempView("users")
+features = spark.sql("""
+    SELECT
+        u.user_id,
+        u.age,
+        u.signup_days_ago,
+        e.event_count,
+        e.avg_session_duration,
+        e.distinct_pages,
+        u.is_premium as label
+    FROM users u
+    JOIN (
+        SELECT
+            user_id,
+            COUNT(*) as event_count,
+            AVG(session_duration) as avg_session_duration,
+            COUNT(DISTINCT page_id) as distinct_pages
+        FROM events
+        WHERE event_date >= '2024-01-01'
+        GROUP BY user_id
+    ) e ON u.user_id = e.user_id
+    WHERE u.age IS NOT NULL
+""")
+# --- Phase 2: Convert to Ray Dataset ---
+train_ds = raydp.spark.spark_dataframe_to_ray_dataset(features)
+# Stop Spark to free cluster resources for training
+raydp.stop_spark()
+# --- Phase 3: Ray ML Training ---
+import torch
+import torch.nn as nn
+def train_func(config):
+    import ray.train
+    train_ds = ray.train.get_dataset_shard("train")
+    model = nn.Sequential(
+        nn.Linear(5, 64), nn.ReLU(),
+        nn.Linear(64, 32), nn.ReLU(),
+        nn.Linear(32, 1), nn.Sigmoid(),
+    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    loss_fn = nn.BCELoss()
+    for epoch in range(10):
+        for batch in train_ds.iter_torch_batches(batch_size=256):
+            features = torch.stack([
+                batch["age"], batch["signup_days_ago"],
+                batch["event_count"], batch["avg_session_duration"],
+                batch["distinct_pages"],
+            ], dim=1).float()
+            labels = batch["label"].float().unsqueeze(1)
+            pred = model(features)
+            loss = loss_fn(pred, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        ray.train.report({"loss": loss.item()})
+trainer = TorchTrainer(
+    train_func,
+    datasets={"train": train_ds},
+    scaling_config=ScalingConfig(num_workers=4, use_gpu=True),
+)
+result = trainer.fit()
+print(f"Final loss: {result.metrics['loss']:.4f}")
+`} />
+
+## Architecture: How RayDP Works Internally
+
+<MermaidDiagram chart={`graph TD
+    subgraph "RayDP Internal Architecture"
+        APP[Your Application] --> SS[SparkSession\nvia raydp.init_spark]
+        SS --> SB[Custom Scheduler Backend\nRayClusterManager]
+        SB --> RA1[Ray Actor\nSpark Executor 1]
+        SB --> RA2[Ray Actor\nSpark Executor 2]
+        SB --> RA3[Ray Actor\nSpark Executor 3]
+        RA1 --> JVM1[JVM Process\nWith Spark Code]
+        RA2 --> JVM2[JVM Process\nWith Spark Code]
+        RA3 --> JVM3[JVM Process\nWith Spark Code]
+        SS -->|"spark_dataframe_to_ray_dataset"| CONV[Arrow Conversion]
+        CONV --> RDS[Ray Dataset]
+        RDS --> RW[Ray Workers\nML Training]
+    end
+    style APP fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style SS fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style SB fill:#ed8936,stroke:#ed8936,color:#1a1d27
+    style CONV fill:#68d391,stroke:#68d391,color:#1a1d27
+    style RDS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style RW fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style RA1 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style RA2 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style RA3 fill:#242734,stroke:#ed8936,color:#e0e0e0
+    style JVM1 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style JVM2 fill:#242734,stroke:#fc8181,color:#e0e0e0
+    style JVM3 fill:#242734,stroke:#fc8181,color:#e0e0e0
+`} />
+
+RayDP implements a custom `ExternalClusterManager` for Spark. When Spark requests executors, RayDP creates Ray actors instead of launching standalone JVM processes. Each Ray actor runs a JVM inside it — so Spark's execution engine (Catalyst, Tungsten, shuffle) works exactly as it does on YARN or Kubernetes, but resource allocation and scheduling are managed by Ray.
+
+## When to Use RayDP
+
+**Good fit:**
+- Existing Spark ETL pipelines that feed into Ray ML training
+- Teams with Spark SQL expertise that want to add ML capabilities
+- Workloads that genuinely need both SQL analytics and distributed ML
+- Unified cluster management: one Ray cluster instead of separate Spark and ML clusters
+
+**Not ideal:**
+- Pure data processing with no ML component (just use Spark)
+- Pure ML with no SQL requirements (just use Ray Data)
+- Workloads where Spark's JVM memory overhead is unacceptable
+- Environments where installing Java/JVM is not feasible
+
+## Resource Management Tips
+
+<CodeBlock language="python" filename="raydp_resources.py" code={`# Tip 1: Release Spark resources before ML training
+spark = raydp.init_spark("pipeline", num_executors=8,
+                          executor_cores=4, executor_memory="8g")
+# ... do Spark ETL ...
+ray_dataset = raydp.spark.spark_dataframe_to_ray_dataset(spark_df)
+raydp.stop_spark()  # Frees 8 executors worth of resources
+# Now all cluster resources are available for Ray training
+# Tip 2: Size executors to leave room for Ray workers
+# On a 64-core, 256GB cluster:
+spark = raydp.init_spark("shared", num_executors=4,
+                          executor_cores=4, executor_memory="16g")
+# Uses 16 cores + 64GB for Spark, leaving 48 cores + 192GB for Ray
+# Tip 3: Use dynamic allocation when available
+spark = raydp.init_spark("dynamic", num_executors=2,
+                          executor_cores=4, executor_memory="8g",
+                          configs={
+                              "spark.dynamicAllocation.enabled": "true",
+                              "spark.dynamicAllocation.minExecutors": "1",
+                              "spark.dynamicAllocation.maxExecutors": "8",
+                          })
+`} />
+
+RayDP gives you the full power of Spark SQL while keeping everything on a single Ray cluster. For organizations transitioning from Spark to Ray, it provides a smooth bridge — start with RayDP for your existing ETL, gradually migrate simple pipelines to Ray Data, and keep Spark for the SQL-heavy parts where it genuinely excels.

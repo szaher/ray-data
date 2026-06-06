@@ -1,0 +1,140 @@
+---
+title: "Actors"
+quiz:
+  - question: "How do Ray actors differ from Ray tasks?"
+    options:
+      - "Actors are faster than tasks"
+      - "Actors maintain state across method calls; tasks are stateless"
+      - "Actors can only run on the head node"
+      - "Tasks support GPUs but actors do not"
+    correctIndex: 1
+    explanation: "The key difference is statefulness. A Ray actor is a long-lived worker process that holds state in instance variables across multiple method calls, while tasks are stateless — each invocation is independent."
+  - question: "What happens when you call two methods on the same actor handle?"
+    options:
+      - "They run in parallel on different workers"
+      - "They run sequentially in the order they were called"
+      - "The second call overwrites the first"
+      - "Ray raises a ConcurrencyError"
+    correctIndex: 1
+    explanation: "A single actor processes method calls sequentially in FIFO order. This guarantees thread-safe access to the actor's internal state without requiring locks."
+---
+
+## Why Actors?
+
+Tasks are stateless — each call is independent. But many workloads need **state**: a model loaded in memory, a database connection, a running counter. Actors solve this.
+
+A Ray **actor** is a `@ray.remote` class. Ray creates a dedicated worker process for it, and that process stays alive, holding state between method calls.
+
+<CodeBlock language="python" code={`import ray
+
+ray.init()
+
+@ray.remote
+class Counter:
+    def __init__(self):
+        self.value = 0
+
+    def increment(self):
+        self.value += 1
+        return self.value
+
+    def get_value(self):
+        return self.value
+
+# Create an actor instance
+counter = Counter.remote()  # Returns an ActorHandle
+
+# Call methods on it
+counter.increment.remote()
+counter.increment.remote()
+counter.increment.remote()
+
+print(ray.get(counter.get_value.remote()))  # 3
+`} />
+
+## Actor Lifecycle
+
+When you call `MyClass.remote()`, Ray starts a new worker process, runs `__init__`, and returns an **actor handle**. The process lives until the handle goes out of scope, you call `ray.kill()`, or the actor crashes.
+
+<MermaidDiagram chart={`graph TD
+    D[Driver] -->|"Counter.remote()"| S[Scheduler]
+    S -->|"Start process\nRun __init__"| A[Actor Process\nCounter]
+    D -->|".increment.remote()"| A
+    D -->|".increment.remote()"| A
+    D -->|".get_value.remote()"| A
+    A -->|"state: value=2"| A
+    style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
+    style S fill:#242734,stroke:#63b3ed,color:#e0e0e0
+    style A fill:#68d391,stroke:#68d391,color:#1a1d27
+`} />
+
+## Sequential Execution Guarantee
+
+Method calls on a **single actor** are processed one at a time, in order. This means you never need locks — the actor model gives you thread safety for free.
+
+<CodeBlock language="python" code={`@ray.remote
+class BankAccount:
+    def __init__(self, balance):
+        self.balance = balance
+
+    def deposit(self, amount):
+        self.balance += amount
+        return self.balance
+
+    def withdraw(self, amount):
+        if amount > self.balance:
+            raise ValueError("Insufficient funds")
+        self.balance -= amount
+        return self.balance
+
+account = BankAccount.remote(100)
+# These execute in order — no race conditions
+account.deposit.remote(50)
+account.withdraw.remote(30)
+print(ray.get(account.withdraw.remote(10)))  # 110
+`} />
+
+## Scaling with Actor Pools
+
+Need parallelism **and** state? Use multiple actors. The `ActorPool` utility distributes work across a pool of actor instances:
+
+<CodeBlock language="python" code={`from ray.util import ActorPool
+
+@ray.remote
+class TextProcessor:
+    def __init__(self, model_name):
+        self.model = load_model(model_name)  # Loaded once
+
+    def process(self, text):
+        return self.model.predict(text)
+
+# Create a pool of 4 actors, each holding its own model
+processors = [TextProcessor.remote("bert") for _ in range(4)]
+pool = ActorPool(processors)
+
+texts = ["hello world", "ray is great", "actors are useful", ...]
+results = list(pool.map(lambda actor, t: actor.process.remote(t), texts))
+`} />
+
+## Actor Resources and Options
+
+Like tasks, actors can declare resource requirements. You can also configure concurrency and lifetime:
+
+<CodeBlock language="python" code={`@ray.remote(num_cpus=2, num_gpus=1)
+class ModelServer:
+    def __init__(self, checkpoint):
+        import torch
+        self.model = torch.load(checkpoint)
+
+    def predict(self, batch):
+        return self.model(batch)
+
+# Named actors survive the driver — accessible from other jobs
+server = ModelServer.options(
+    name="my_model",
+    lifetime="detached",
+    max_concurrency=4,  # Handle 4 calls concurrently
+).remote("model.pt")
+`} />
+
+Named, detached actors are useful for long-running services like model servers. Any Ray job on the same cluster can connect to them with `ray.get_actor("my_model")`.

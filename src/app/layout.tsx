@@ -1,33 +1,30 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import Header from "@/components/Header";
+import Sidebar from "@/components/Sidebar";
+import { getCurriculum } from "@/lib/curriculum";
 
 export const metadata: Metadata = {
   title: "Ray Data Academy",
-  description: "Interactive learning platform for Ray and Ray Data",
+  description: "Interactive platform for learning Ray and Ray Data",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  const curriculum = await getCurriculum();
+
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="dark">
+      <body className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex flex-1 min-h-0">
+          <Sidebar curriculum={curriculum} />
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </div>
+      </body>
     </html>
   );
 }

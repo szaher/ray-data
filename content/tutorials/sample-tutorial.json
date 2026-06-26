@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "sample-ai-tutorial",
+  "title": "Build Reliable AI Tutorials",
+  "description": "A compact sample specification for an end-to-end tutorial on creating reliable AI-generated lessons.",
+  "audience": {
+    "primary": "Technical educators and developer advocates",
+    "priorKnowledge": ["Basic Markdown", "Introductory TypeScript"],
+    "roles": ["curriculum designer", "developer educator"],
+    "readingLevel": "Upper secondary or higher"
+  },
+  "prerequisites": ["Can edit MDX files", "Can run pnpm scripts locally"],
+  "learningObjectives": [
+    {
+      "id": "obj-define-quality",
+      "description": "Define quality gates for generated educational content.",
+      "bloomLevel": "apply",
+      "assessmentIds": ["assess-quality-gates"]
+    },
+    {
+      "id": "obj-map-evidence",
+      "description": "Map tutorial claims to cited sources and verification states.",
+      "bloomLevel": "analyze",
+      "assessmentIds": ["assess-citation-map"]
+    }
+  ],
+  "scope": {
+    "inScope": ["Tutorial specification", "MDX artifacts", "Validation gates"],
+    "nonGoals": ["Replacing human subject-matter review", "Generating production claims without sources"]
+  },
+  "lessons": [
+    {
+      "id": "lesson-quality-foundation",
+      "slug": "01-sample-lesson",
+      "title": "Quality Foundations",
+      "summary": "Learn how explicit schemas and source rules reduce ambiguity in generated tutorials.",
+      "estimatedMinutes": 10,
+      "difficulty": "beginner",
+      "prerequisites": ["Can read JSON"],
+      "objectiveIds": ["obj-define-quality", "obj-map-evidence"],
+      "conceptIds": ["concept-quality-gate", "concept-claim-state"],
+      "referenceIds": ["ref-wcag", "ref-mdx"],
+      "artifacts": {
+        "mdxPath": "content/module-1/01-sample-lesson.mdx",
+        "slidesPath": "presentations/00-sample-deck.md",
+        "narrationScriptPath": "content/module-1/01-sample-lesson.narration.md"
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-wcag",
+      "title": "Web Content Accessibility Guidelines",
+      "url": "https://www.w3.org/TR/WCAG22/",
+      "publisher": "W3C",
+      "accessedAt": "2026-06-19",
+      "quality": "primary"
+    },
+    {
+      "id": "ref-mdx",
+      "title": "MDX Documentation",
+      "url": "https://mdxjs.com/",
+      "publisher": "MDX",
+      "accessedAt": "2026-06-19",
+      "quality": "official-docs"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "concept-quality-gate",
+      "term": "Quality gate",
+      "definition": "A deterministic check that generated content must pass before publication.",
+      "relatedConceptIds": ["concept-claim-state"]
+    },
+    {
+      "id": "concept-claim-state",
+      "term": "Claim state",
+      "definition": "A label indicating whether a factual statement is verified, needs verification, or is unsupported."
+    }
+  ],
+  "misconceptions": [
+    {
+      "id": "mis-ai-is-review",
+      "misconception": "A model-generated lesson is ready when it sounds polished.",
+      "correction": "Generated content still needs schema validation, source checks, accessibility checks, and human review.",
+      "conceptIds": ["concept-quality-gate"]
+    }
+  ],
+  "workedExamples": [
+    {
+      "id": "example-claim-check",
+      "title": "Marking a claim for verification",
+      "prompt": "A lesson says a tool is the most popular option but has no source.",
+      "steps": ["Label the claim as verify.", "Add it to the source plan.", "Require a citation before publishing."],
+      "explanation": "Popularity claims are unstable and need recent evidence.",
+      "conceptIds": ["concept-claim-state"],
+      "referenceIds": ["ref-mdx"]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "exercise-quality-gate",
+      "prompt": "List three checks that should run before publishing a generated lesson.",
+      "type": "short-answer",
+      "difficulty": "beginner",
+      "conceptIds": ["concept-quality-gate"],
+      "answerId": "answer-quality-gate"
+    }
+  ],
+  "answers": [
+    {
+      "id": "answer-quality-gate",
+      "exerciseId": "exercise-quality-gate",
+      "answer": "Schema validation, MDX compilation, citation checks, accessibility checks, and unsupported-claim detection are all valid.",
+      "rubric": ["Names deterministic checks", "Includes at least one source or claim check"]
+    }
+  ],
+  "formativeAssessment": [
+    {
+      "id": "assess-quality-gates",
+      "type": "quiz",
+      "prompt": "Why should validation run before human review?",
+      "expectedAnswer": "It catches structural and mechanical defects before reviewers spend time on pedagogy and factuality.",
+      "objectiveIds": ["obj-define-quality"]
+    },
+    {
+      "id": "assess-citation-map",
+      "type": "free-response",
+      "prompt": "How should an unsupported claim be represented in MDX?",
+      "expectedAnswer": "It should be wrapped in a verification state and connected to a source plan item.",
+      "objectiveIds": ["obj-map-evidence"]
+    }
+  ],
+  "masteryCriteria": [
+    {
+      "id": "mastery-quality",
+      "description": "Can explain the purpose of each required quality gate.",
+      "objectiveIds": ["obj-define-quality"],
+      "threshold": "Accurately explains at least four gates."
+    },
+    {
+      "id": "mastery-evidence",
+      "description": "Can classify claims as verified, verify, or unsupported.",
+      "objectiveIds": ["obj-map-evidence"],
+      "threshold": "Correctly classifies four out of five sample claims."
+    }
+  ],
+  "recap": ["Use structured specs to constrain generation.", "Treat citations and verification states as required content, not polish."],
+  "nextSteps": ["Author a source plan for a real tutorial.", "Run pnpm validate before requesting review."],
+  "accessibility": {
+    "altTextRequired": true,
+    "captionsRequired": true,
+    "transcriptRequired": true,
+    "colorIndependent": true,
+    "keyboardNavigable": true,
+    "readingOrderChecked": true
+  },
+  "localization": {
+    "sourceLocale": "en-US",
+    "targetLocales": ["en-GB"],
+    "glossaryTerms": ["quality gate", "claim state"],
+    "culturalAssumptions": ["Examples assume familiarity with command-line development."]
+  }
+}

@@ -63,3 +63,5 @@ export interface ExportProgress {
   message: string;
   files?: string[];
 }
+
+export type * from "./tutorial";

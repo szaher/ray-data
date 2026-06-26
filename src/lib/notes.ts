@@ -1,4 +1,4 @@
-const STORAGE_KEY = "ray-data-academy-notes";
+import { storageKeys } from "../../academy.config";
 
 function noteKey(moduleId: number, lessonSlug: string): string {
   return `${moduleId}:${lessonSlug}`;
@@ -6,12 +6,17 @@ function noteKey(moduleId: number, lessonSlug: string): string {
 
 function getAllNotes(): Record<string, string> {
   if (typeof localStorage === "undefined") return {};
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : {};
+  const raw = localStorage.getItem(storageKeys.notes);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 function saveAllNotes(notes: Record<string, string>): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  localStorage.setItem(storageKeys.notes, JSON.stringify(notes));
 }
 
 export function getLessonNote(moduleId: number, lessonSlug: string): string {

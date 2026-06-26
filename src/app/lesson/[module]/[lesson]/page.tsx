@@ -3,9 +3,24 @@ import { getCurriculum, getLessonContent, getModuleMeta } from "@/lib/curriculum
 import LessonContent from "@/components/LessonContent";
 import { parseMDX } from "@/lib/mdx";
 import { MDXRemote } from "@/components/MDXRemote";
+import type { QuizQuestion } from "@/types";
 
 interface LessonPageProps {
   params: Promise<{ module: string; lesson: string }>;
+}
+
+type RawQuizQuestion = Omit<QuizQuestion, "explanation"> & { explanation?: string };
+
+function isQuizQuestion(value: unknown): value is RawQuizQuestion {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.question === "string" &&
+    Array.isArray(item.options) &&
+    item.options.every((option) => typeof option === "string") &&
+    typeof item.correctIndex === "number" &&
+    (typeof item.explanation === "string" || item.explanation === undefined)
+  );
 }
 
 export default async function LessonPage({ params }: LessonPageProps) {
@@ -23,7 +38,12 @@ export default async function LessonPage({ params }: LessonPageProps) {
   if (!raw) notFound();
 
   const { frontmatter, content } = parseMDX(raw);
-  const quiz = (frontmatter.quiz as unknown[]) ?? [];
+  const quiz: QuizQuestion[] = Array.isArray(frontmatter.quiz)
+    ? frontmatter.quiz.filter(isQuizQuestion).map((item) => ({
+        ...item,
+        explanation: item.explanation ?? "Review the lesson section above and try the concept again.",
+      }))
+    : [];
 
   const curriculum = await getCurriculum();
 
@@ -52,7 +72,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
     <LessonContent
       module={moduleMeta}
       lesson={lesson}
-      quiz={quiz as any}
+      quiz={quiz}
       prevHref={prevHref}
       nextHref={nextHref}
     >

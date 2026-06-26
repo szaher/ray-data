@@ -1,19 +1,21 @@
+import Link from "next/link";
 import { getCurriculum } from "@/lib/curriculum";
+import { academy } from "../../academy.config";
 
 export default async function HomePage() {
   const curriculum = await getCurriculum();
 
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
-      <h1 className="text-3xl font-bold mb-2">Welcome to Ray Data Academy</h1>
+      <h1 className="text-3xl font-bold mb-2">Welcome to {academy.name}</h1>
       <p className="text-[var(--text-secondary)] mb-8">
-        Master Ray and Ray Data from the ground up. {curriculum.modules.length} modules,{" "}
+        {academy.tagline}. {curriculum.modules.length} modules,{" "}
         {curriculum.modules.reduce((s, m) => s + m.lessons.length, 0)} lessons.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {curriculum.modules.map((mod) => (
-          <a
+          <Link
             key={mod.id}
             href={`/lesson/${mod.id}/${mod.lessons[0].slug}`}
             className="block p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-colors"
@@ -31,7 +33,7 @@ export default async function HomePage() {
             <p className="text-xs text-[var(--text-secondary)] mt-2">
               {mod.lessons.length} lessons
             </p>
-          </a>
+          </Link>
         ))}
       </div>
     </div>

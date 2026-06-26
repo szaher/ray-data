@@ -1,13 +1,28 @@
 import { spawn } from "child_process";
-import path from "path";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const VALID_FORMATS = ["both", "markdown", "notebook"] as const;
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { module: moduleId, format = "both" } = body;
+
+  if (typeof format !== "string" || !VALID_FORMATS.includes(format as typeof VALID_FORMATS[number])) {
+    return new Response(JSON.stringify({ error: `Invalid format. Must be one of: ${VALID_FORMATS.join(", ")}` }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (moduleId !== undefined && (typeof moduleId !== "number" || !Number.isInteger(moduleId) || moduleId < 1)) {
+    return new Response(JSON.stringify({ error: "Module must be a positive integer" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const args = ["scripts/export.py"];
 

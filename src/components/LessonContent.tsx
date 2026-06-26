@@ -7,8 +7,9 @@ import { markLessonComplete } from "@/lib/progress";
 import { getLessonNote } from "@/lib/notes";
 import { extractSections, type SpeechSection } from "@/lib/speech";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useVoices } from "@/hooks/useVoices";
 import Quiz from "./Quiz";
-import NotesPanel from "./NotesPanel";
+import SidePanel, { type SidePanelTab } from "./SidePanel";
 import VoiceControls from "./VoiceControls";
 
 interface LessonContentProps {
@@ -31,11 +32,14 @@ export default function LessonContent({
   const router = useRouter();
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SidePanelTab>("notes");
   const [hasNotes, setHasNotes] = useState(false);
   const [sections, setSections] = useState<SpeechSection[]>([]);
+  const voiceState = useVoices();
 
   const speech = useSpeechSynthesis({
+    voice: voiceState.selectedVoice,
     onSectionChange: (index) => {
       const section = sections[index];
       if (section?.headingElement && section.headingElement !== contentRef.current) {
@@ -44,15 +48,27 @@ export default function LessonContent({
     },
   });
 
+  const openPanelTab = useCallback((tab: SidePanelTab) => {
+    if (panelOpen && activeTab === tab) {
+      setPanelOpen(false);
+      return;
+    }
+    setActiveTab(tab);
+    setPanelOpen(true);
+  }, [panelOpen, activeTab]);
+
   useEffect(() => {
-    setHasNotes(getLessonNote(mod.id, lesson.slug).length > 0);
+    queueMicrotask(() => {
+      setHasNotes(getLessonNote(mod.id, lesson.slug).length > 0);
+    });
   }, [mod.id, lesson.slug]);
 
   useEffect(() => {
     if (!contentRef.current) return;
     const timer = setTimeout(() => {
       if (contentRef.current) {
-        setSections(extractSections(contentRef.current));
+        const container = contentRef.current;
+        setSections(extractSections(container).filter((section) => section.headingElement !== container));
       }
     }, 500);
     return () => clearTimeout(timer);
@@ -95,7 +111,7 @@ export default function LessonContent({
     (index: number) => {
       if (sections[index]) speech.playSection(sections, index);
     },
-    [sections, speech]
+    [sections, speech],
   );
 
   return (
@@ -134,41 +150,69 @@ export default function LessonContent({
               onCycleSpeed={speech.cycleSpeed}
             />
 
-            <button
-              onClick={() => setNotesOpen(!notesOpen)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
-                notesOpen
-                  ? "text-[var(--accent-blue)] bg-[var(--accent-blue)]/10"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]"
-              }`}
-              title="Toggle notes"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <div className="flex items-center gap-1">
+              {/* Notes toggle */}
+              <button
+                onClick={() => openPanelTab("notes")}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                  panelOpen && activeTab === "notes"
+                    ? "text-[var(--accent-blue)] bg-[var(--accent-blue)]/10"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]"
+                }`}
+                title="Notes"
               >
-                <path d="M12 20h9" />
-                <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
-              </svg>
-              <span>Notes</span>
-              {hasNotes && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-green)]" />
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
+                </svg>
+                <span>Notes</span>
+                {hasNotes && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-green)]" />
+                )}
+              </button>
+
+              {/* Voice settings toggle */}
+              {speech.isSupported && (
+                <button
+                  onClick={() => openPanelTab("voice")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                    panelOpen && activeTab === "voice"
+                      ? "text-[var(--accent-blue)] bg-[var(--accent-blue)]/10"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]"
+                  }`}
+                  title="Voice settings"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
               )}
-            </button>
+            </div>
           </div>
 
-          <div ref={contentRef} className="prose prose-invert max-w-none relative">
+          <div ref={contentRef} className="prose max-w-none relative">
             {children}
 
-            {sections.map((section, i) => {
-              if (section.headingElement === contentRef.current) return null;
-              return (
+            {sections.map((section, i) => (
                 <button
                   key={section.id}
                   onClick={() => handlePlaySection(i)}
@@ -186,8 +230,7 @@ export default function LessonContent({
                     <polygon points="6,4 20,12 6,20" />
                   </svg>
                 </button>
-              );
-            })}
+            ))}
           </div>
 
           {quiz && quiz.length > 0 && (
@@ -201,12 +244,12 @@ export default function LessonContent({
 
           <div className="flex items-center justify-between mt-12 pt-6 border-t border-[var(--border)]">
             {prevHref ? (
-              <a
-                href={prevHref}
+              <button
+                onClick={() => router.push(prevHref)}
                 className="text-sm text-[var(--accent-blue)] hover:underline"
               >
                 ← Previous
-              </a>
+              </button>
             ) : (
               <div />
             )}
@@ -234,12 +277,22 @@ export default function LessonContent({
         </div>
       </div>
 
-      <NotesPanel
+      <SidePanel
+        isOpen={panelOpen}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onClose={() => setPanelOpen(false)}
         moduleId={mod.id}
         lessonSlug={lesson.slug}
-        isOpen={notesOpen}
-        onClose={() => setNotesOpen(false)}
         onNoteChange={setHasNotes}
+        voices={voiceState.voices.map((v) => v.voice)}
+        selectedVoiceURI={voiceState.selectedVoiceURI}
+        onSelectVoice={voiceState.selectVoice}
+        speed={speech.speed}
+        onCycleSpeed={speech.cycleSpeed}
+        isPlaying={speech.isPlaying}
+        isSpeechSupported={speech.isSupported}
+        contentLang={voiceState.contentLang}
       />
     </div>
   );

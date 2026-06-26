@@ -1,0 +1,309 @@
+{
+  "schemaVersion": "1.1.0",
+  "id": "enhanced-ai-tutorial",
+  "title": "Build Reliable AI Tutorials (Enhanced)",
+  "description": "An enhanced specification demonstrating content style, gamification, adaptive paths, and SOTA educational features.",
+  "audience": {
+    "primary": "Technical educators and developer advocates",
+    "priorKnowledge": ["Basic Markdown", "Introductory TypeScript"],
+    "roles": ["curriculum designer", "developer educator"],
+    "readingLevel": "Upper secondary or higher"
+  },
+  "prerequisites": ["Can edit MDX files", "Can run pnpm scripts locally"],
+  "learningObjectives": [
+    {
+      "id": "obj-define-quality",
+      "description": "Define quality gates for generated educational content.",
+      "bloomLevel": "apply",
+      "assessmentIds": ["assess-quality-gates"]
+    },
+    {
+      "id": "obj-map-evidence",
+      "description": "Map tutorial claims to cited sources and verification states.",
+      "bloomLevel": "analyze",
+      "assessmentIds": ["assess-citation-map"]
+    }
+  ],
+  "scope": {
+    "inScope": ["Tutorial specification", "MDX artifacts", "Validation gates"],
+    "nonGoals": ["Replacing human subject-matter review", "Generating production claims without sources"]
+  },
+  "lessons": [
+    {
+      "id": "lesson-quality-foundation",
+      "slug": "01-quality-foundations",
+      "title": "Quality Foundations",
+      "summary": "Learn how explicit schemas and source rules reduce ambiguity in generated tutorials.",
+      "estimatedMinutes": 10,
+      "difficulty": "beginner",
+      "prerequisites": ["Can read JSON"],
+      "objectiveIds": ["obj-define-quality"],
+      "conceptIds": ["concept-quality-gate"],
+      "referenceIds": ["ref-wcag"],
+      "artifacts": {
+        "mdxPath": "content/module-1/01-quality-foundations.mdx",
+        "items": [
+          {
+            "id": "art-quality-flow",
+            "type": "mermaid",
+            "status": "planned",
+            "objectiveIds": ["obj-define-quality"],
+            "accessibility": {
+              "altText": "Flowchart showing spec to prompt to validation to review pipeline",
+              "fallbackText": "Tutorial specs feed structured prompts, then validation gates, then human review."
+            }
+          }
+        ]
+      },
+      "dependsOnLessonIds": [],
+      "multimediaPlan": {
+        "recommendations": [
+          {
+            "id": "rec-quality-diagram",
+            "type": "mermaid",
+            "rationale": "Visualizes the quality gate pipeline for immediate comprehension.",
+            "priority": "required",
+            "placement": "Introduction section",
+            "contentBrief": "Flow diagram showing spec → prompt → validate → review pipeline.",
+            "accessibilityNotes": "Provide fallback text describing the four-stage pipeline.",
+            "estimatedEffort": "low"
+          }
+        ]
+      },
+      "metacognition": [
+        {
+          "type": "self-assessment",
+          "prompt": "Before starting, rate your confidence in defining what makes educational content reliable.",
+          "placement": "before-lesson"
+        }
+      ],
+      "scaffolding": {
+        "hintLevels": 3,
+        "differentiatedPaths": true,
+        "graduatedComplexity": true
+      }
+    },
+    {
+      "id": "lesson-evidence-mapping",
+      "slug": "02-evidence-mapping",
+      "title": "Evidence Mapping",
+      "summary": "Classify and trace tutorial claims back to their source evidence.",
+      "estimatedMinutes": 15,
+      "difficulty": "intermediate",
+      "prerequisites": ["Understands quality gates"],
+      "objectiveIds": ["obj-map-evidence"],
+      "conceptIds": ["concept-claim-state"],
+      "referenceIds": ["ref-mdx"],
+      "dependsOnLessonIds": ["lesson-quality-foundation"],
+      "artifacts": {
+        "mdxPath": "content/module-1/02-evidence-mapping.mdx"
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "ref-wcag",
+      "title": "Web Content Accessibility Guidelines",
+      "url": "https://www.w3.org/TR/WCAG22/",
+      "publisher": "W3C",
+      "accessedAt": "2026-06-19",
+      "quality": "primary"
+    },
+    {
+      "id": "ref-mdx",
+      "title": "MDX Documentation",
+      "url": "https://mdxjs.com/",
+      "publisher": "MDX",
+      "accessedAt": "2026-06-19",
+      "quality": "official-docs"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "concept-quality-gate",
+      "term": "Quality gate",
+      "definition": "A deterministic check that generated content must pass before publication.",
+      "relatedConceptIds": ["concept-claim-state"]
+    },
+    {
+      "id": "concept-claim-state",
+      "term": "Claim state",
+      "definition": "A label indicating whether a factual statement is verified, needs verification, or is unsupported."
+    }
+  ],
+  "misconceptions": [
+    {
+      "id": "mis-ai-is-review",
+      "misconception": "A model-generated lesson is ready when it sounds polished.",
+      "correction": "Generated content still needs schema validation, source checks, accessibility checks, and human review.",
+      "conceptIds": ["concept-quality-gate"]
+    }
+  ],
+  "workedExamples": [
+    {
+      "id": "example-claim-check",
+      "title": "Marking a claim for verification",
+      "prompt": "A lesson says a tool is the most popular option but has no source.",
+      "steps": ["Label the claim as verify.", "Add it to the source plan.", "Require a citation before publishing."],
+      "explanation": "Popularity claims are unstable and need recent evidence.",
+      "conceptIds": ["concept-claim-state"],
+      "referenceIds": ["ref-mdx"]
+    }
+  ],
+  "exercises": [
+    {
+      "id": "exercise-quality-gate",
+      "prompt": "List three checks that should run before publishing a generated lesson.",
+      "type": "short-answer",
+      "difficulty": "beginner",
+      "conceptIds": ["concept-quality-gate"],
+      "answerId": "answer-quality-gate"
+    }
+  ],
+  "answers": [
+    {
+      "id": "answer-quality-gate",
+      "exerciseId": "exercise-quality-gate",
+      "answer": "Schema validation, MDX compilation, citation checks, accessibility checks, and unsupported-claim detection.",
+      "rubric": ["Names deterministic checks", "Includes at least one source or claim check"]
+    }
+  ],
+  "formativeAssessment": [
+    {
+      "id": "assess-quality-gates",
+      "type": "quiz",
+      "prompt": "Why should validation run before human review?",
+      "expectedAnswer": "It catches structural and mechanical defects before reviewers spend time on pedagogy and factuality.",
+      "objectiveIds": ["obj-define-quality"]
+    },
+    {
+      "id": "assess-citation-map",
+      "type": "free-response",
+      "prompt": "How should an unsupported claim be represented in MDX?",
+      "expectedAnswer": "It should be wrapped in a verification state and connected to a source plan item.",
+      "objectiveIds": ["obj-map-evidence"]
+    }
+  ],
+  "masteryCriteria": [
+    {
+      "id": "mastery-quality",
+      "description": "Can explain the purpose of each required quality gate.",
+      "objectiveIds": ["obj-define-quality"],
+      "threshold": "Accurately explains at least four gates."
+    },
+    {
+      "id": "mastery-evidence",
+      "description": "Can classify claims as verified, verify, or unsupported.",
+      "objectiveIds": ["obj-map-evidence"],
+      "threshold": "Correctly classifies four out of five sample claims."
+    }
+  ],
+  "recap": ["Use structured specs to constrain generation.", "Treat citations and verification states as required content, not polish."],
+  "nextSteps": ["Author a source plan for a real tutorial.", "Run pnpm validate before requesting review."],
+  "accessibility": {
+    "altTextRequired": true,
+    "captionsRequired": true,
+    "transcriptRequired": true,
+    "colorIndependent": true,
+    "keyboardNavigable": true,
+    "readingOrderChecked": true
+  },
+  "localization": {
+    "sourceLocale": "en-US",
+    "targetLocales": ["en-GB"],
+    "glossaryTerms": ["quality gate", "claim state"],
+    "culturalAssumptions": ["Examples assume familiarity with command-line development."]
+  },
+  "contentStyle": {
+    "voice": "systematic",
+    "approaches": ["hands-on"],
+    "generationMode": "sequential"
+  },
+  "gamification": {
+    "enabled": true,
+    "badges": [
+      {
+        "id": "badge-first-lesson",
+        "title": "First Steps",
+        "description": "Complete your first lesson.",
+        "criteria": "Finish lesson-quality-foundation.",
+        "iconHint": "star"
+      },
+      {
+        "id": "badge-evidence-master",
+        "title": "Evidence Master",
+        "description": "Score 100% on evidence mapping quiz.",
+        "criteria": "Perfect score on assess-citation-map.",
+        "iconHint": "magnifying-glass"
+      },
+      {
+        "id": "badge-completionist",
+        "title": "Completionist",
+        "description": "Complete all lessons and exercises.",
+        "criteria": "All lessons and exercises completed.",
+        "iconHint": "trophy"
+      }
+    ],
+    "pointRules": [
+      { "action": "lesson-complete", "points": 100, "description": "Points for completing a lesson." },
+      { "action": "quiz-perfect", "points": 50, "description": "Bonus points for perfect quiz score." }
+    ],
+    "streakTracking": true,
+    "achievements": [
+      {
+        "id": "ach-unlock-advanced",
+        "title": "Advanced Unlocked",
+        "description": "Completing the foundation lesson unlocks advanced content.",
+        "unlocksLessonIds": ["lesson-evidence-mapping"]
+      }
+    ]
+  },
+  "adaptivePaths": [
+    {
+      "id": "path-beginner-express",
+      "title": "Beginner Express",
+      "description": "Quick path covering essentials only.",
+      "entryCondition": "Learner self-identifies as beginner.",
+      "lessonSequence": ["lesson-quality-foundation"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "path-deep-dive",
+      "title": "Deep Dive",
+      "description": "Full path with all lessons and exercises.",
+      "entryCondition": "Learner self-identifies as intermediate or advanced.",
+      "lessonSequence": ["lesson-quality-foundation", "lesson-evidence-mapping"],
+      "difficulty": "intermediate"
+    }
+  ],
+  "spacedRepetition": {
+    "enabled": true,
+    "intervals": [1, 3, 7, 14, 30],
+    "reviewCardCount": 10
+  },
+  "microlearning": {
+    "enabled": false,
+    "maxMinutesPerModule": 5,
+    "digestFormat": "flashcard"
+  },
+  "projectCapstones": [
+    {
+      "id": "capstone-tutorial-audit",
+      "title": "Tutorial Quality Audit",
+      "description": "Audit an existing tutorial for quality gate compliance.",
+      "deliverables": ["Audit report", "Remediation plan"],
+      "rubric": ["Identifies at least three quality gate failures", "Proposes actionable fixes"],
+      "estimatedHours": 2,
+      "prerequisiteLessonIds": ["lesson-quality-foundation", "lesson-evidence-mapping"],
+      "conceptIds": ["concept-quality-gate", "concept-claim-state"]
+    }
+  ],
+  "udlFramework": {
+    "multipleRepresentations": ["text explanations", "mermaid diagrams", "worked examples"],
+    "multipleActions": ["quizzes", "short-answer exercises", "reflection prompts"],
+    "multipleEngagement": ["real-world scenarios", "gamified achievements", "self-assessment"]
+  },
+  "collaborativeLearning": {
+    "enabled": false
+  }
+}

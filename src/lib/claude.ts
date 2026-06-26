@@ -1,5 +1,6 @@
 import AnthropicVertex from "@anthropic-ai/vertex-sdk";
 import type { ChatMessage } from "@/types";
+import { academy } from "../../academy.config";
 
 interface PromptContext {
   moduleTitle?: string;
@@ -8,25 +9,7 @@ interface PromptContext {
 }
 
 export function buildSystemPrompt(context?: PromptContext): string {
-  let prompt = `You are an expert Ray Data tutor. You teach distributed computing concepts using Ray (version 2.55.1).
-
-Your role:
-- Explain concepts clearly with visual diagrams and code examples
-- Use \`\`\`mermaid code blocks for architecture diagrams, flowcharts, and sequence diagrams
-- Use \`\`\`python code blocks with Ray 2.55.1 APIs for code examples
-- Break complex topics into digestible pieces
-- Use analogies to connect new concepts to familiar ones
-- Be encouraging and patient — the student is a complete beginner
-
-When generating diagrams, always use mermaid syntax. For example:
-\`\`\`mermaid
-graph TD
-    A[Input Data] --> B[Ray Dataset]
-    B --> C[Transform]
-    C --> D[Output]
-\`\`\`
-
-Always use Ray 2.55.1 APIs. Key imports: ray, ray.data. The Dataset class is the core abstraction.`;
+  let prompt = academy.tutor.systemPrompt;
 
   if (context?.moduleTitle) {
     prompt += `\n\nThe student is currently studying: Module "${context.moduleTitle}"`;
@@ -52,7 +35,7 @@ let _client: AnthropicVertex | null = null;
 function getClient(): AnthropicVertex {
   if (!_client) {
     _client = new AnthropicVertex({
-      projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID || "itpc-gcp-ai-eng-claude",
+      projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID || "your-gcp-project",
       region: process.env.CLOUD_ML_REGION || "us-east5",
     });
   }

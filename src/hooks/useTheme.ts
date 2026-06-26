@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { storageKeys } from "../../academy.config";
 
 type ThemeMode = "system" | "light" | "dark";
-
-const STORAGE_KEY = "ray-data-academy-theme";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "dark";
@@ -19,14 +18,14 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const [mode, setMode] = useState<ThemeMode>("system");
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    if (typeof localStorage === "undefined") return "system";
+    return (localStorage.getItem(storageKeys.theme) as ThemeMode | null) || "system";
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    const initial = stored || "system";
-    setMode(initial);
-    applyTheme(initial);
-  }, []);
+    applyTheme(mode);
+  }, [mode]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -41,7 +40,7 @@ export function useTheme() {
     setMode((prev) => {
       const order: ThemeMode[] = ["system", "light", "dark"];
       const next = order[(order.indexOf(prev) + 1) % order.length];
-      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(storageKeys.theme, next);
       applyTheme(next);
       return next;
     });

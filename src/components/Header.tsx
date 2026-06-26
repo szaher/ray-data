@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ExportMenu from "./ExportMenu";
 import ThemeToggle from "./ThemeToggle";
+import { academy } from "../../academy.config";
 
 export default function Header() {
   const pathname = usePathname();
@@ -13,8 +14,8 @@ export default function Header() {
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
       <Link href="/" className="flex items-center gap-2 text-[var(--accent-blue)] font-semibold text-lg">
-        <span className="w-2.5 h-2.5 rounded-full bg-[var(--accent-blue)]" />
-        Ray Data Academy
+        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: academy.accentColor }} />
+        {academy.name}
       </Link>
 
       <nav className="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded-lg p-1">

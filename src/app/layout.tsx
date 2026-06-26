@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import { getCurriculum } from "@/lib/curriculum";
+import { academy } from "../../academy.config";
 
 export const metadata: Metadata = {
-  title: "Ray Data Academy",
-  description: "Interactive platform for learning Ray and Ray Data",
+  title: academy.name,
+  description: academy.description,
 };
 
 export default async function RootLayout({
@@ -18,14 +20,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("ray-data-academy-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light":t;document.documentElement.setAttribute("data-theme",d)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})()`,
-          }}
-        />
-      </head>
+      <head />
       <body className="min-h-screen flex flex-col">
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
         <Header />
         <div className="flex flex-1 min-h-0">
           <Sidebar curriculum={curriculum} />

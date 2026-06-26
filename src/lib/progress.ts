@@ -1,6 +1,5 @@
 import type { LessonProgress, ProgressState } from "@/types";
-
-const STORAGE_KEY = "ray-data-academy-progress";
+import { storageKeys } from "../../academy.config";
 
 const DEFAULT_STATE: ProgressState = {
   lessons: {},
@@ -14,13 +13,17 @@ function lessonKey(moduleId: number, lessonSlug: string): string {
 
 export function getProgress(): ProgressState {
   if (typeof localStorage === "undefined") return { ...DEFAULT_STATE };
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(storageKeys.progress);
   if (!raw) return { ...DEFAULT_STATE, lessons: {} };
-  return JSON.parse(raw) as ProgressState;
+  try {
+    return JSON.parse(raw) as ProgressState;
+  } catch {
+    return { ...DEFAULT_STATE, lessons: {} };
+  }
 }
 
 function saveProgress(state: ProgressState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(storageKeys.progress, JSON.stringify(state));
 }
 
 export function markLessonComplete(moduleId: number, lessonSlug: string, quizScore?: number): void {

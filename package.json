@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "preview": "next dev",
+    "update:template": "bash scripts/update-template.sh",
+    "validate": "node scripts/validate.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -13,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/vertex-sdk": "^0.16.1",
     "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/mdx": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
     "@next/mdx": "^16.2.7",

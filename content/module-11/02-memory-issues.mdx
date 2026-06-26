@@ -19,9 +19,9 @@ quiz:
     explanation: "The Ray Dashboard memory tab shows a breakdown of memory usage by object store, heap, and per-task consumption. This tells you whether the problem is too many large objects, a single task consuming too much memory, or object store spilling — each requiring a different fix."
 ---
 
-## Ray's Memory Model
+## Ray's memory model
 
-Understanding how Ray uses memory is the key to fixing OOM errors. Ray divides each node's memory into distinct regions, and each region can independently cause problems.
+Ray divides each node's memory into distinct regions, and each region can independently cause problems. Knowing which region is filling up tells you what to fix.
 
 <MermaidDiagram chart={`graph TB
     subgraph "Node Memory (e.g., 32 GB)"
@@ -50,19 +50,19 @@ Understanding how Ray uses memory is the key to fixing OOM errors. Ray divides e
     style GCS fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-**Three types of memory that can cause OOM:**
+Three types of memory can cause OOM:
 
-- **Object store** — Shared memory region where Ray puts intermediate data (dataset blocks, `ray.put()` objects). Default is 30% of system RAM.
-- **Worker heap** — Each worker process has its own Python heap. This is where your UDF allocations happen (loading models, creating numpy arrays, etc.).
-- **Raylet/GCS** — Ray's own system processes. Rarely the cause of OOM but can matter on small nodes.
+- **Object store**: the shared memory region where Ray puts intermediate data (dataset blocks, `ray.put()` objects). Defaults to 30% of system RAM.
+- **Worker heap**: each worker process has its own Python heap. This is where your UDF allocations happen, including loading models and creating numpy arrays.
+- **Raylet/GCS**: Ray's own system processes. Rarely the cause of OOM, but can matter on small nodes.
 
 ---
 
-## Object Store Spilling
+## Object store spilling
 
 When the object store fills up, Ray *spills* objects to disk. This keeps your pipeline running but dramatically slows things down.
 
-**How to recognize spilling:**
+How to recognize spilling:
 
 <CodeBlock code={`# You'll see warnings like this in the logs:
 # WARNING -- The object store is full. Objects are being spilled to disk.
@@ -73,7 +73,7 @@ import ray
 memory_info = ray.cluster_resources()
 print(f"Object store capacity: {memory_info.get('object_store_memory', 0) / 1e9:.1f} GB")`} language="python" filename="check_spilling.py" />
 
-**How to configure the object store:**
+How to configure the object store:
 
 <CodeBlock code={`import ray
 # Increase object store size (up to available shared memory)
@@ -90,7 +90,7 @@ ray.init(
 
 ---
 
-## OOM Symptoms and What They Mean
+## OOM symptoms and what they mean
 
 Different symptoms point to different root causes:
 
@@ -112,11 +112,11 @@ Different symptoms point to different root causes:
 
 ---
 
-## The Debugging Workflow
+## The debugging workflow
 
-Follow this systematic process whenever you encounter memory issues:
+Follow this process whenever you encounter memory issues.
 
-### Step 1: Check the Dashboard Memory Tab
+### Step 1: check the Dashboard memory tab
 
 <CodeBlock code={`import ray
 # Start Ray with the dashboard enabled
@@ -128,7 +128,7 @@ ray.init(dashboard_host="0.0.0.0", dashboard_port=8265)
 #   - Per-node memory breakdown
 #   - Spilling indicators`} language="python" filename="step1_dashboard.py" />
 
-### Step 2: Check Object Store Usage
+### Step 2: check object store usage
 
 <CodeBlock code={`import ray
 # Check object store usage in code
@@ -139,7 +139,7 @@ print(f"Dataset size estimate: {ds.size_bytes() / 1e9:.2f} GB")
 print(f"Number of blocks: {ds.num_blocks()}")
 print(f"Average block size: {ds.size_bytes() / ds.num_blocks() / 1e6:.1f} MB")`} language="python" filename="step2_object_store.py" />
 
-### Step 3: Check Data Size at Each Stage
+### Step 3: check data size at each stage
 
 <CodeBlock code={`import ray
 ds = ray.data.read_parquet("data/")
@@ -155,9 +155,9 @@ print(f"After featurize: {ds.size_bytes() / 1e9:.2f} GB, {ds.num_blocks()} block
 
 ## Solutions
 
-### Solution 1: Streaming Execution
+### Solution 1: streaming execution
 
-The most powerful fix. Instead of materializing the entire dataset, process it in a streaming fashion so only a small window of data is in memory at any time.
+The most effective fix. Instead of materializing the entire dataset, process it in a streaming fashion so only a small window of data is in memory at any time.
 
 <CodeBlock code={`import ray
 ds = ray.data.read_parquet("s3://bucket/100gb-dataset/")
@@ -172,9 +172,9 @@ for batch in ds.iter_batches(batch_size=2048):
 ds = ds.map_batches(process, batch_size=1024)
 ds.write_parquet("s3://bucket/output/")`} language="python" filename="streaming_execution.py" />
 
-### Solution 2: Smaller Batch Sizes
+### Solution 2: smaller batch sizes
 
-Each batch lives in worker heap memory. Smaller batches = less memory per worker.
+Each batch lives in worker heap memory. Smaller batches mean less memory per worker.
 
 <CodeBlock code={`# Each worker holds one batch in memory at a time
 # batch_size=4096 with 1 KB rows = ~4 MB per worker (fine)
@@ -185,7 +185,7 @@ target_batch_memory = 512 * 1024 * 1024  # 512 MB target per batch
 batch_size = target_batch_memory // row_size_bytes  # = 512
 ds = ds.map_batches(process, batch_size=batch_size)`} language="python" filename="tune_batch_size.py" />
 
-### Solution 3: Repartition to Smaller Blocks
+### Solution 3: repartition to smaller blocks
 
 <CodeBlock code={`ds = ray.data.read_parquet("data/")
 # If you have a few huge blocks, repartition to spread the data
@@ -196,7 +196,7 @@ num_blocks = max(1, ds.size_bytes() // target_block_size)
 ds = ds.repartition(num_blocks)
 print(f"After repartition: {ds.num_blocks()} blocks")`} language="python" filename="repartition.py" />
 
-### Solution 4: Limit Concurrency
+### Solution 4: limit concurrency
 
 <CodeBlock code={`# Fewer concurrent workers = less total memory usage
 # Default: Ray uses all available CPUs
@@ -207,7 +207,7 @@ ds = ds.map_batches(
     num_gpus=1,           # each worker gets 1 GPU
 )`} language="python" filename="limit_concurrency.py" />
 
-### Solution 5: Configure Memory Budget
+### Solution 5: configure memory budget
 
 <CodeBlock code={`import ray
 ctx = ray.data.DataContext.get_current()
@@ -218,15 +218,15 @@ ctx.execution_options.resource_limits.object_store_memory = 4 * 1024 * 1024 * 10
 
 ---
 
-## Memory Debugging Checklist
+## Memory debugging checklist
 
 Before asking for help, check these in order:
 
-1. **Dashboard memory tab** — What percentage of object store is used?
-2. **`ds.size_bytes()`** — How large is your dataset at each stage?
-3. **Spilling warnings in logs** — Is data spilling to disk?
-4. **Batch size** — How much memory does each batch require?
-5. **Concurrency** — How many workers are running simultaneously?
-6. **Data expansion** — Does your transform make the data larger (e.g., adding embeddings)?
+1. Dashboard memory tab: what percentage of object store is used?
+2. `ds.size_bytes()`: how large is your dataset at each stage?
+3. Spilling warnings in logs: is data spilling to disk?
+4. Batch size: how much memory does each batch require?
+5. Concurrency: how many workers are running simultaneously?
+6. Data expansion: does your transform make the data larger (e.g., adding embeddings)?
 
 If you are still stuck, the output of `ds.stats()` is the single most useful thing to include in a bug report.

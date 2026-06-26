@@ -19,9 +19,9 @@ quiz:
     explanation: "A class-based callable (with __init__ and __call__) lets Ray load the model once when the actor starts. The model stays in memory and is reused for every batch the actor processes. With a plain function, the model would need to be loaded on every single batch, which is prohibitively expensive for large models."
 ---
 
-## From Data Pipeline to Model Training
+## From data pipeline to model training
 
-Ray Data is designed to be the **connective tissue** between your data pipeline and your ML framework. Instead of materializing intermediate files, you stream data directly from a Ray Dataset into PyTorch, TensorFlow, or HuggingFace training loops.
+Ray Data connects your data pipeline to your ML framework. Instead of materializing intermediate files, you stream data directly from a Ray Dataset into PyTorch, TensorFlow, or HuggingFace training loops.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Data Layer"
@@ -63,7 +63,7 @@ for batch in ds.iter_torch_batches(batch_size=256, dtypes=torch.float32):
     print(f"Batch shape: {features.shape}")
     break  # just showing one batch`} language="python" filename="pytorch_iter.py" />
 
-### Full Training Loop Example
+### Full training loop example
 
 <CodeBlock language="python" code={`import ray
 import torch
@@ -125,11 +125,11 @@ def to_tf_dataset(ray_ds, batch_size=256):
 tf_ds = to_tf_dataset(ds)
 # model.fit(tf_ds, epochs=10)`} language="python" filename="tensorflow_iter.py" />
 
-## HuggingFace Integration
+## HuggingFace integration
 
-HuggingFace models and tokenizers integrate naturally with Ray Data's `map_batches()`. This is powerful for both **preprocessing** (tokenization) and **batch inference**.
+HuggingFace models and tokenizers integrate naturally with Ray Data's `map_batches()`. This works well for both **preprocessing** (tokenization) and **batch inference**.
 
-### Tokenization as a Map Operation
+### Tokenization as a map operation
 
 <CodeBlock language="python" code={`import ray
 from transformers import AutoTokenizer
@@ -160,7 +160,7 @@ tokenized_ds = ds.map_batches(
 print(tokenized_ds.schema())
 print(tokenized_ds.take(1))`} language="python" filename="hf_tokenize.py" />
 
-### Batch Inference with HuggingFace Models
+### Batch inference with HuggingFace models
 
 <CodeBlock language="python" code={`import ray
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -202,7 +202,7 @@ results = ds.map_batches(
 )
 results.write_parquet("s3://YOUR_BUCKET/predictions/")`} language="python" filename="hf_inference.py" />
 
-## Ray Train Integration
+## Ray Train integration
 
 For distributed training, Ray Train accepts Ray Datasets directly. The `Trainer` handles data sharding across workers automatically.
 
@@ -274,7 +274,7 @@ trainer = TorchTrainer(
 result = trainer.fit()
 print(f"Final loss: {result.metrics['loss']}")`} language="python" filename="ray_train_integration.py" />
 
-## Preprocessor Chains
+## Preprocessor chains
 
 Ray Data supports chaining multiple preprocessing steps into a **Preprocessor** that can be saved and applied consistently during both training and inference.
 
@@ -301,7 +301,7 @@ new_data = ray.data.read_parquet("s3://YOUR_BUCKET/new_features/")
 new_transformed = preprocessor.transform(new_data)
 print(transformed_ds.schema())`} language="python" filename="preprocessor_chain.py" />
 
-## Batch Inference at Scale
+## Batch inference at scale
 
 The combination of `map_batches()` with `ActorPoolStrategy` (or the `concurrency` parameter) is Ray Data's pattern for **scalable batch inference**. Each actor loads the model once and processes many batches.
 
@@ -334,4 +334,4 @@ predictions = ds.map_batches(
 )
 predictions.write_parquet("s3://YOUR_BUCKET/image_predictions/")`} language="python" filename="batch_inference.py" />
 
-**Key pattern:** Use a class with `__init__` (load model once) and `__call__` (process each batch). Set `concurrency` to control the number of model replicas and `num_gpus` to assign GPU resources per replica.
+The pattern: use a class with `__init__` (load model once) and `__call__` (process each batch). Set `concurrency` to control the number of model replicas and `num_gpus` to assign GPU resources per replica.

@@ -19,9 +19,9 @@ quiz:
     explanation: "Ray Data excels at the compute layer: it distributes feature transformation logic across many workers, then writes the results to a feature store like Feast for serving. The feature store handles storage and retrieval."
 ---
 
-## The Feature Store Pattern
+## The feature store pattern
 
-ML models need features at two moments: **training** (batch, historical data) and **inference** (real-time, latest values). A feature store bridges these two worlds, and Ray Data is ideal for the compute layer that feeds it.
+ML models need features at two moments: training (batch, historical data) and inference (real-time, latest values). A feature store bridges these two needs, and Ray Data works well as the compute layer that feeds it.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Feature Computation (Ray Data)"
@@ -43,9 +43,9 @@ ML models need features at two moments: **training** (batch, historical data) an
     style SERVE fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Computing Features with Ray Data
+## Computing features with Ray Data
 
-The first step is defining feature transformations as Ray Data operations. These transforms run at scale across a cluster, then produce outputs in a format the feature store can ingest.
+Define feature transformations as Ray Data operations. These transforms run at scale across a cluster, then produce outputs in a format the feature store can ingest.
 
 <CodeBlock language="python" code={`import ray
 import pandas as pd
@@ -73,7 +73,7 @@ features_ds = ds.map_batches(
 # Write to the offline store location
 features_ds.write_parquet("s3://feature-store/offline/user_features/")`} />
 
-## Feast Integration
+## Feast integration
 
 Feast is a popular open-source feature store. After Ray Data computes features and writes them to storage, Feast manages versioning, retrieval, and online/offline consistency.
 
@@ -123,7 +123,7 @@ online_features = store.get_online_features(
     features=["user_features:total_purchases"],
 ).to_dict()`} />
 
-## End-to-End Architecture
+## End-to-end architecture
 
 <MermaidDiagram chart={`graph LR
     subgraph "Scheduled Job"
@@ -145,9 +145,9 @@ online_features = store.get_online_features(
     style G fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Key Takeaways
+## Key takeaways
 
-- **Ray Data handles computation**, the feature store handles storage and retrieval -- each does what it is best at
-- Write Ray Data outputs to the **offline store** (Parquet/BigQuery), then materialize to the **online store** (Redis/DynamoDB)
-- **Feast** provides versioned feature definitions, point-in-time-correct joins for training, and low-latency online lookups
-- This pattern gives you **one source of truth** for features used in both training and serving
+- Ray Data handles computation, the feature store handles storage and retrieval. Each does what it does best.
+- Write Ray Data outputs to the offline store (Parquet/BigQuery), then materialize to the online store (Redis/DynamoDB).
+- Feast provides versioned feature definitions, point-in-time-correct joins for training, and low-latency online lookups.
+- This pattern gives you a single source of truth for features used in both training and serving.

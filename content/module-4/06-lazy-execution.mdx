@@ -19,7 +19,7 @@ quiz:
     explanation: "materialize() forces the full pipeline to execute and keeps the resulting blocks in Ray's object store (memory). This is useful when you plan to iterate over the same Dataset multiple times and want to avoid re-computation."
 ---
 
-## Lazy by Default
+## Lazy by default
 
 When you chain transformations in Ray Data, **nothing executes**. Each call to `map_batches`, `filter`, or `map` adds a step to a logical plan. Execution is deferred until you consume the results.
 
@@ -35,9 +35,9 @@ When you chain transformations in Ray Data, **nothing executes**. Each call to `
     style C fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Why Lazy Execution?
+## Why lazy execution?
 
-Lazy execution enables two important optimizations:
+Lazy execution enables two optimizations:
 
 1. **Operator fusion** -- Ray Data can merge adjacent map steps into a single pass over the data, reducing serialization overhead.
 2. **Streaming execution** -- data flows through the pipeline block-by-block instead of materializing every intermediate result in memory.
@@ -60,7 +60,7 @@ print(ds)
 # THIS triggers execution:
 ds.show(5)`} />
 
-## What Triggers Execution?
+## What triggers execution?
 
 These operations cause the pipeline to run:
 
@@ -75,9 +75,9 @@ These operations cause the pipeline to run:
 | `write_csv()` | Writes results to CSV |
 | `materialize()` | Forces full execution, pins in memory |
 
-## materialize() — Pinning Results
+## materialize(): pinning results
 
-By default, once data flows through a consumer, the intermediate blocks are freed. If you need to iterate over the same dataset multiple times (e.g., multiple training epochs), use `materialize()` to keep results in memory.
+By default, once data flows through a consumer, the intermediate blocks are freed. If you need to iterate over the same dataset multiple times (for example, multiple training epochs), use `materialize()` to keep results in memory.
 
 <CodeBlock language="python" code={`# Without materialize — re-reads and re-computes every epoch
 ds = ray.data.read_parquet("s3://bucket/train/")
@@ -96,10 +96,9 @@ for epoch in range(5):
     for batch in ds.iter_batches(batch_size=128):  # reads from memory
         train(batch)`} />
 
-## When to Materialize
+## When to materialize
 
-- **Materialize** when you will consume the same dataset multiple times (multi-epoch training, multiple aggregations).
-- **Do not materialize** when data is consumed once (single-pass inference, write-and-forget ETL). Streaming execution is more memory-efficient.
+Materialize when you will consume the same dataset multiple times (multi-epoch training, multiple aggregations). Skip it when data is consumed once (single-pass inference, write-and-forget ETL). Streaming execution is more memory-efficient for single-pass workloads.
 
 <CodeBlock language="python" code={`# Good use of materialize: multi-epoch training
 train_ds = ray.data.read_parquet("train/").map_batches(prep).materialize()

@@ -19,9 +19,9 @@ quiz:
     explanation: "Class-based transforms create the object once per worker via __init__. The class itself is picklable (it's just a class reference), and __init__ runs on the worker where the unpicklable resource is created locally. This avoids serializing the connection entirely."
 ---
 
-## Why Serialization Matters
+## Why serialization matters
 
-When you call `ds.map(my_function)`, Ray needs to send `my_function` to every worker. Workers run as separate Python processes, potentially on different machines. The only way to send a Python object between processes is to convert it to bytes (serialize), send the bytes, and reconstruct the object (deserialize).
+When you call `ds.map(my_function)`, Ray needs to send `my_function` to every worker. Workers run as separate Python processes, potentially on different machines. The only way to send a Python object between processes is to convert it to bytes (serialize), send those bytes, and reconstruct the object on the other side (deserialize).
 
 <MermaidDiagram chart={`sequenceDiagram
     participant D as Driver Process
@@ -42,9 +42,9 @@ Ray uses **cloudpickle** (an enhanced version of Python's pickle) and **Apache A
 
 ---
 
-## Common Unpicklable Objects
+## Common unpicklable objects
 
-These objects **cannot be serialized** and will cause `TypeError: cannot pickle` errors:
+These objects cannot be serialized and will cause `TypeError: cannot pickle` errors:
 
 | Object Type | Why It Fails | Example |
 |---|---|---|
@@ -57,11 +57,11 @@ These objects **cannot be serialized** and will cause `TypeError: cannot pickle`
 
 ---
 
-## The Fix: Class-Based Transforms
+## The fix: class-based transforms
 
-The most reliable pattern for avoiding serialization issues. The class itself is picklable (Ray just sends the class reference). The `__init__` method runs on each worker, creating unpicklable resources locally.
+This is the most reliable pattern for avoiding serialization issues. The class itself is picklable because Ray just sends the class reference. The `__init__` method runs on each worker, creating unpicklable resources locally.
 
-### Pattern 1: Database Connections
+### Pattern 1: database connections
 
 <CodeBlock code={`# BROKEN: Connection created in driver, captured by lambda
 import psycopg2
@@ -81,7 +81,7 @@ class DatabaseLookup:
         return {"id": row["id"], "result": self.cursor.fetchone()}
 ds = ds.map(DatabaseLookup, concurrency=4)`} language="python" filename="fix_database.py" />
 
-### Pattern 2: ML Model Loading
+### Pattern 2: ML model loading
 
 <CodeBlock code={`# BROKEN: Model loaded in driver, captured by closure
 import torch
@@ -105,7 +105,7 @@ class ModelPredictor:
         return {"pred": preds}
 ds = ds.map_batches(ModelPredictor, concurrency=2, num_gpus=1, batch_size=256)`} language="python" filename="fix_model.py" />
 
-### Pattern 3: File Handles and Clients
+### Pattern 3: file handles and clients
 
 <CodeBlock code={`# BROKEN: HTTP client created in driver
 import httpx
@@ -124,9 +124,9 @@ ds = ds.map(HttpFetcher, concurrency=8)`} language="python" filename="fix_http_c
 
 ---
 
-## ray.put() for Large Shared Objects
+## ray.put() for large shared objects
 
-When you have a large **read-only** object (like a lookup table or model weights) that all workers need, use `ray.put()` to store it once in the object store. Without it, the object gets serialized separately for every single task.
+When you have a large read-only object (like a lookup table or model weights) that all workers need, use `ray.put()` to store it once in the object store. Without it, the object gets serialized separately for every single task.
 
 <MermaidDiagram chart={`flowchart LR
     subgraph "Without ray.put()"
@@ -175,7 +175,7 @@ ds = ds.map(enrich_with_embedding)`} language="python" filename="ray_put_example
 
 ---
 
-## Custom Serializers
+## Custom serializers
 
 For objects with known serialization patterns, you can register custom serializers so Ray knows how to handle them:
 
@@ -200,9 +200,9 @@ ray.util.register_custom_serializer(
 
 ---
 
-## ActorPoolStrategy for Stateful Transforms
+## ActorPoolStrategy for stateful transforms
 
-When your transform has expensive initialization (loading a model, opening a connection), use a class-based transform with `concurrency`. This creates **persistent actor workers** that initialize once and handle many batches.
+When your transform has expensive initialization (loading a model, opening a connection), use a class-based transform with `concurrency`. This creates persistent actor workers that initialize once and handle many batches.
 
 <CodeBlock code={`import ray
 # The class __init__ runs ONCE per actor, not once per batch
@@ -253,7 +253,7 @@ ds = ds.map_batches(
 
 ---
 
-## Serialization Decision Tree
+## Serialization decision tree
 
 Use this flowchart when you hit a serialization error:
 

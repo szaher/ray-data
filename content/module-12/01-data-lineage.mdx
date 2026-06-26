@@ -19,9 +19,9 @@ quiz:
     explanation: "Data lineage tracks the full transformation history of your data, so when something goes wrong you can trace the issue back to the exact operator, input block, or configuration that caused it."
 ---
 
-## Why Observability Matters
+## Why observability matters
 
-When a pipeline processes millions of rows across dozens of workers, you need answers to: Where is the bottleneck? Which operator is slow? How much memory is each stage using? Ray Data provides built-in observability to answer these questions.
+When a pipeline processes millions of rows across dozens of workers, you need to know where the bottleneck is, which operator is slow, and how much memory each stage is using. Ray Data provides built-in observability for all of this.
 
 <MermaidDiagram chart={`graph LR
     subgraph Pipeline Execution
@@ -46,9 +46,9 @@ When a pipeline processes millions of rows across dozens of workers, you need an
     style L fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Dataset Stats API
+## Dataset stats API
 
-After executing a pipeline, Ray Data exposes detailed statistics for every operator. This is your first tool for debugging performance issues.
+After executing a pipeline, Ray Data exposes detailed statistics for every operator. This is the first tool to reach for when debugging performance.
 
 <CodeBlock language="python" code={`import ray
 
@@ -75,10 +75,10 @@ print(ds.stats())
 
 The Ray Dashboard provides a live, visual view of your pipeline. Navigate to the **Datasets** tab to see:
 
-- **Operator progress** -- how many blocks each operator has processed
-- **Throughput** -- rows/sec and bytes/sec per operator
-- **Memory usage** -- object store memory consumed by each stage
-- **Backpressure indicators** -- which operators are waiting on downstream capacity
+- Operator progress: how many blocks each operator has processed
+- Throughput: rows/sec and bytes/sec per operator
+- Memory usage: object store memory consumed by each stage
+- Backpressure indicators: which operators are waiting on downstream capacity
 
 <MermaidDiagram chart={`graph TD
     subgraph "Ray Dashboard - Dataset View"
@@ -94,7 +94,7 @@ The Ray Dashboard provides a live, visual view of your pipeline. Navigate to the
     style OP4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} />
 
-## Debugging with Lineage
+## Debugging with lineage
 
 When an output looks wrong, lineage helps you trace back to the cause. Combine `stats()` with logging inside your UDFs to build a full picture.
 
@@ -120,9 +120,9 @@ ds.materialize()
 stats = ds.stats()
 print(stats)  # Look for skewed block sizes or slow operators`} />
 
-## Key Takeaways
+## Key takeaways
 
-- **`ds.stats()`** gives you per-operator metrics after materialization
-- The **Ray Dashboard Datasets tab** shows live progress, throughput, and memory
-- Add **structured logging** inside UDFs to trace data quality issues
-- Lineage is about connecting outputs back to inputs -- essential for debugging production pipelines
+- `ds.stats()` gives you per-operator metrics after materialization
+- The Ray Dashboard Datasets tab shows live progress, throughput, and memory
+- Structured logging inside UDFs helps trace data quality issues
+- Lineage connects outputs back to inputs, which is essential for debugging production pipelines

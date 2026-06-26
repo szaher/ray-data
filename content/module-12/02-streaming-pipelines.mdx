@@ -19,9 +19,9 @@ quiz:
     explanation: "Backpressure is Ray Data's flow control mechanism. When a downstream operator's output queue is full, upstream operators pause, preventing the system from producing data faster than it can be consumed."
 ---
 
-## From Batch to Streaming
+## From batch to streaming
 
-Traditional batch pipelines read all data, process it, then write results. Streaming pipelines process data continuously as it arrives -- block by block. Ray Data uses streaming execution by default, and this pattern extends naturally to real-time workloads.
+Traditional batch pipelines read all data, process it, then write results. Streaming pipelines process data continuously as it arrives, block by block. Ray Data uses streaming execution by default, and this pattern extends naturally to real-time workloads.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Batch: Load Everything First"
@@ -42,9 +42,9 @@ Traditional batch pipelines read all data, process it, then write results. Strea
     style S6 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} />
 
-## Streaming Execution in Ray Data
+## Streaming execution in Ray Data
 
-Ray Data's `iter_batches()` and `iter_torch_batches()` enable streaming consumption. The pipeline produces blocks on-demand as the consumer pulls them.
+Ray Data's `iter_batches()` and `iter_torch_batches()` enable streaming consumption. The pipeline produces blocks on demand as the consumer pulls them.
 
 <CodeBlock language="python" code={`import ray
 
@@ -64,7 +64,7 @@ for epoch in range(10):
     for batch in train_ds.iter_torch_batches(batch_size=256):
         loss = model.train_step(batch)  # Blocks stream in as needed`} />
 
-## Continuous Ingestion Pattern
+## Continuous ingestion pattern
 
 For near-real-time workloads, you can build a loop that continuously reads new data partitions and processes them through your pipeline.
 
@@ -96,7 +96,7 @@ while True:
     print(f"Processed {rows} rows")
     time.sleep(3600)  # Wait for next hourly partition`} />
 
-## Backpressure and Flow Control
+## Backpressure and flow control
 
 Ray Data automatically applies backpressure when downstream operators are slower than upstream ones. This prevents out-of-memory errors without any configuration.
 
@@ -126,9 +126,9 @@ ds = ds.map_batches(
 )
 ds.write_parquet("s3://my-bucket/predictions/")`} />
 
-## Key Takeaways
+## Key takeaways
 
-- Ray Data uses **streaming execution by default** -- data flows block-by-block through operators
-- Use **`iter_batches()`** to consume results lazily without loading the full dataset
-- Build **continuous ingestion loops** for near-real-time partition processing
-- **Backpressure** is automatic: slow operators cause upstream operators to pause, keeping memory bounded
+- Ray Data uses streaming execution by default. Data flows block-by-block through operators.
+- Use `iter_batches()` to consume results lazily without loading the full dataset.
+- Build continuous ingestion loops for near-real-time partition processing.
+- Backpressure is automatic: slow operators cause upstream operators to pause, keeping memory bounded.

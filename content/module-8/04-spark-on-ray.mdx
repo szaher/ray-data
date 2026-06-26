@@ -19,13 +19,13 @@ quiz:
     explanation: "RayDP implements a custom Spark scheduler backend that launches each Spark executor as a Ray actor. This means Spark executors are managed by Ray's resource scheduler, share the same cluster, and can be co-located with Ray workers for efficient data transfer."
 ---
 
-## The Best of Both Worlds
+## Running Spark SQL and Ray ML on one cluster
 
-What if you did not have to choose between Spark and Ray? What if you could run Spark SQL for the parts of your pipeline where it excels, and Ray for ML training and serving, on the same cluster, passing data between them without writing to disk?
+You do not have to choose between Spark and Ray. You can run Spark SQL for the parts of your pipeline where it excels and Ray for ML training and serving, on the same cluster, passing data between them without writing to disk.
 
-That is exactly what **RayDP** (Ray Data Processing) provides. It is an open-source library that runs Apache Spark on a Ray cluster by implementing Spark executors as Ray actors.
+**RayDP** (Ray Data Processing) is an open-source library that makes this possible. It runs Apache Spark on a Ray cluster by implementing Spark executors as Ray actors.
 
-## What is RayDP?
+## What RayDP does
 
 RayDP is a thin integration layer that:
 
@@ -74,9 +74,9 @@ pip install raydp[spark33]  # For Spark 3.3.x
 python -c "import raydp; print(raydp.__version__)"
 `} />
 
-RayDP requires a working Ray installation and a compatible PySpark version. It does not require a standalone Spark cluster — the whole point is that Ray provides the cluster.
+RayDP requires a working Ray installation and a compatible PySpark version. It does not require a standalone Spark cluster. Ray provides the cluster.
 
-## Setting Up a Spark Session on Ray
+## Setting up a Spark session on Ray
 
 <CodeBlock language="python" filename="raydp_setup.py" code={`import ray
 import raydp
@@ -100,7 +100,7 @@ raydp.stop_spark()
 ray.shutdown()
 `} />
 
-The `raydp.init_spark()` function creates a standard PySpark `SparkSession`, but instead of connecting to YARN or a standalone Spark master, it launches Spark executors as Ray actors. You get a fully functional SparkSession with the same API, the same Catalyst optimizer, and the same Spark SQL support.
+`raydp.init_spark()` creates a standard PySpark `SparkSession`, but instead of connecting to YARN or a standalone Spark master, it launches Spark executors as Ray actors. You get a fully functional SparkSession with the same API, the same Catalyst optimizer, and the same Spark SQL support.
 
 ## Running Spark SQL on Ray
 
@@ -136,9 +136,9 @@ window = Window.partitionBy("customer_id").orderBy(col("amount").desc())
 ranked = df.withColumn("rank", row_number().over(window))
 `} />
 
-## Converting Between Spark DataFrames and Ray Datasets
+## Converting between Spark DataFrames and Ray Datasets
 
-This is where RayDP shines. You can move data between Spark and Ray without writing to disk.
+This is where RayDP pays off. You can move data between Spark and Ray without writing to disk.
 
 <CodeBlock language="python" filename="raydp_conversion.py" code={`import ray
 import raydp
@@ -169,9 +169,9 @@ spark_df_back.show()
 
 The conversion uses Apache Arrow as the intermediate format. Data is transferred through Ray's object store, avoiding serialization to disk. For large datasets, this is significantly faster than writing Parquet as an intermediate format.
 
-## End-to-End Example: Spark ETL + Ray ML
+## End-to-end example: Spark ETL + Ray ML
 
-This is the canonical RayDP use case — Spark for data preparation, Ray for model training.
+This is the canonical RayDP use case: Spark for data preparation, Ray for model training.
 
 <CodeBlock language="python" filename="raydp_e2e.py" code={`import ray
 import raydp
@@ -248,7 +248,7 @@ result = trainer.fit()
 print(f"Final loss: {result.metrics['loss']:.4f}")
 `} />
 
-## Architecture: How RayDP Works Internally
+## How RayDP works internally
 
 <MermaidDiagram chart={`graph TD
     subgraph "RayDP Internal Architecture"
@@ -278,23 +278,23 @@ print(f"Final loss: {result.metrics['loss']:.4f}")
     style JVM3 fill:#242734,stroke:#fc8181,color:#e0e0e0
 `} />
 
-RayDP implements a custom `ExternalClusterManager` for Spark. When Spark requests executors, RayDP creates Ray actors instead of launching standalone JVM processes. Each Ray actor runs a JVM inside it — so Spark's execution engine (Catalyst, Tungsten, shuffle) works exactly as it does on YARN or Kubernetes, but resource allocation and scheduling are managed by Ray.
+RayDP implements a custom `ExternalClusterManager` for Spark. When Spark requests executors, RayDP creates Ray actors instead of launching standalone JVM processes. Each Ray actor runs a JVM inside it. Spark's execution engine (Catalyst, Tungsten, shuffle) works exactly as it does on YARN or Kubernetes, but resource allocation and scheduling are managed by Ray.
 
-## When to Use RayDP
+## When to use RayDP
 
-**Good fit:**
+Good fit:
 - Existing Spark ETL pipelines that feed into Ray ML training
 - Teams with Spark SQL expertise that want to add ML capabilities
 - Workloads that genuinely need both SQL analytics and distributed ML
 - Unified cluster management: one Ray cluster instead of separate Spark and ML clusters
 
-**Not ideal:**
+Not ideal:
 - Pure data processing with no ML component (just use Spark)
 - Pure ML with no SQL requirements (just use Ray Data)
 - Workloads where Spark's JVM memory overhead is unacceptable
 - Environments where installing Java/JVM is not feasible
 
-## Resource Management Tips
+## Resource management tips
 
 <CodeBlock language="python" filename="raydp_resources.py" code={`# Tip 1: Release Spark resources before ML training
 spark = raydp.init_spark("pipeline", num_executors=8,
@@ -318,4 +318,4 @@ spark = raydp.init_spark("dynamic", num_executors=2,
                           })
 `} />
 
-RayDP gives you the full power of Spark SQL while keeping everything on a single Ray cluster. For organizations transitioning from Spark to Ray, it provides a smooth bridge — start with RayDP for your existing ETL, gradually migrate simple pipelines to Ray Data, and keep Spark for the SQL-heavy parts where it genuinely excels.
+RayDP gives you full Spark SQL while keeping everything on a single Ray cluster. For organizations transitioning from Spark to Ray, it provides a practical bridge: start with RayDP for your existing ETL, gradually migrate simple pipelines to Ray Data, and keep Spark for the SQL-heavy parts where it genuinely excels.

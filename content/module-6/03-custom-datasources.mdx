@@ -19,9 +19,9 @@ quiz:
     explanation: "The metadata size estimate lets Ray Data's memory-aware scheduler plan ahead — it uses these estimates for backpressure decisions and resource allocation before any data is actually read."
 ---
 
-## When You Need a Custom Datasource
+## When you need a custom datasource
 
-Ray Data has built-in connectors for Parquet, CSV, JSON, images, and more. But when your data lives in a proprietary system — a custom database, a message queue, or an internal API — you need to implement your own `Datasource`.
+Ray Data has built-in connectors for Parquet, CSV, JSON, images, and more. But when your data lives in a proprietary system (a custom database, a message queue, an internal API), you need to implement your own `Datasource`.
 
 <MermaidDiagram chart={`graph TD
     A["Your Custom Datasource"] --> B["get_read_tasks()"]
@@ -39,7 +39,7 @@ Ray Data has built-in connectors for Parquet, CSV, JSON, images, and more. But w
     style W fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Implementing a Read Datasource
+## Implementing a read datasource
 
 The core interface requires implementing `get_read_tasks()`, which returns a list of `ReadTask` objects. Each `ReadTask` is a zero-argument callable that produces an iterator of Arrow tables or pandas DataFrames.
 
@@ -84,7 +84,7 @@ class MyAPIDatasource(Datasource):
             return [table]   # Return list of Arrow tables
         return read`} />
 
-## Using Your Custom Datasource
+## Using your custom datasource
 
 <CodeBlock language="python" code={`# Read from your custom source
 ds = ray.data.read_datasource(
@@ -95,7 +95,7 @@ ds = ray.data.read_datasource(
 ds = ds.filter(lambda row: row["value"] > 0.5)
 print(ds.take(5))`} />
 
-## Implementing a Write Datasource
+## Implementing a write datasource
 
 To support writing, override `do_write()`. Ray Data calls this with blocks of data to persist.
 
@@ -122,9 +122,9 @@ To support writing, override `do_write()`. Ray Data calls this with blocks of da
 # Write a dataset to your custom sink
 ds.write_datasource(MyAPIWriteDatasource("https://api.example.com/ingest"))`} />
 
-## Key Design Considerations
+## Design considerations
 
-- **Partition wisely** — return one `ReadTask` per natural data partition (files, shards, API pages). More tasks means more parallelism.
-- **Estimate metadata accurately** — bad size estimates lead to poor backpressure decisions, causing spilling or underutilization.
-- **Return Arrow tables** — they integrate most efficiently with Ray Data's block format and avoid extra serialization.
-- **Handle retries in your read function** — each `ReadTask` callable may be re-executed on failure, so make reads idempotent.
+- Partition wisely. Return one `ReadTask` per natural data partition (files, shards, API pages). More tasks means more parallelism.
+- Estimate metadata accurately. Bad size estimates lead to poor backpressure decisions, causing spilling or underutilization.
+- Return Arrow tables. They integrate most efficiently with Ray Data's block format and avoid extra serialization.
+- Handle retries in your read function. Each `ReadTask` callable may be re-executed on failure, so make reads idempotent.

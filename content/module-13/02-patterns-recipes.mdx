@@ -5,13 +5,13 @@ quiz: []
 
 ## Overview
 
-Twelve copy-paste patterns for everyday Ray Data work. Each one is self-contained -- read the description, grab the code, and adapt it to your use case.
+Twelve copy-paste patterns for everyday Ray Data work. Each one is self-contained: read the description, grab the code, and adapt it to your use case.
 
 ---
 
 ## 1. Basic ETL: CSV to Parquet
 
-**When to use:** You have raw CSV files and want a clean, typed Parquet output for downstream analytics or ML.
+Use when you have raw CSV files and want a clean, typed Parquet output for downstream analytics or ML.
 
 <CodeBlock language="python" filename="etl_csv_to_parquet.py" code={`import ray
 ds = ray.data.read_csv("s3://bucket/raw/events/*.csv")
@@ -26,9 +26,9 @@ ds.write_parquet("s3://bucket/cleaned/events/")
 
 ---
 
-## 2. Filter and Map with Error Handling
+## 2. Filter and map with error handling
 
-**When to use:** Your data is messy and some rows will fail during transformation. Wrap your logic so bad rows are skipped instead of crashing the pipeline.
+Use when your data is messy and some rows will fail during transformation. Wrap your logic so bad rows are skipped instead of crashing the pipeline.
 
 <CodeBlock language="python" filename="safe_transform.py" code={`import ray
 import json
@@ -45,9 +45,9 @@ ds = ds.filter(lambda row: row is not None)
 
 ---
 
-## 3. Batch Inference with GPU
+## 3. Batch inference with GPU
 
-**When to use:** You need to run a pretrained model over a large dataset. `ActorPoolStrategy` keeps the model loaded in GPU memory across batches, avoiding reload overhead.
+Use when you need to run a pretrained model over a large dataset. `ActorPoolStrategy` keeps the model loaded in GPU memory across batches, avoiding reload overhead.
 
 <CodeBlock language="python" filename="gpu_batch_inference.py" code={`import ray
 from ray.data import ActorPoolStrategy
@@ -75,9 +75,9 @@ ds.write_parquet("s3://bucket/predictions/")
 
 ---
 
-## 4. Join Two Datasets with Zip
+## 4. Join two datasets with zip
 
-**When to use:** You have two datasets with the same row count and ordering (e.g., features and labels) and want to combine them column-wise.
+Use when you have two datasets with the same row count and ordering (e.g., features and labels) and want to combine them column-wise.
 
 <CodeBlock language="python" filename="zip_join.py" code={`import ray
 features = ray.data.read_parquet("features.parquet")
@@ -97,9 +97,9 @@ combined = features.zip(labels)
 
 ---
 
-## 5. GroupBy Aggregation
+## 5. GroupBy aggregation
 
-**When to use:** Summarize data by category -- counts, sums, averages, or custom aggregations per group.
+Use when you need to summarize data by category: counts, sums, averages, or custom aggregations per group.
 
 <CodeBlock language="python" filename="groupby_agg.py" code={`import ray
 ds = ray.data.read_parquet("sales.parquet")
@@ -115,9 +115,9 @@ top_products.show()
 
 ---
 
-## 6. Train/Test Split
+## 6. Train/test split
 
-**When to use:** You need to split a dataset for ML training and evaluation. The split is random but reproducible with a seed.
+Use when you need to split a dataset for ML training and evaluation. The split is random but reproducible with a seed.
 
 <CodeBlock language="python" filename="train_test_split.py" code={`import ray
 ds = ray.data.read_parquet("dataset.parquet")
@@ -131,9 +131,9 @@ for batch in train_ds.iter_torch_batches(batch_size=64):
 
 ---
 
-## 7. Reading Multiple Files with Glob Patterns
+## 7. Reading multiple files with glob patterns
 
-**When to use:** Your data is partitioned across directories by date, region, or other keys. Use glob patterns to read a subset.
+Use when your data is partitioned across directories by date, region, or other keys. Glob patterns let you read a subset.
 
 <CodeBlock language="python" filename="glob_read.py" code={`import ray
 # All parquet files in a directory tree
@@ -150,9 +150,9 @@ ds = ray.data.read_parquet([
 
 ---
 
-## 8. Adding a Column from a Lookup Table
+## 8. Adding a column from a lookup table
 
-**When to use:** You need to enrich rows by looking up values from a small reference table (e.g., mapping country codes to names).
+Use when you need to enrich rows by looking up values from a small reference table (e.g., mapping country codes to names).
 
 <CodeBlock language="python" filename="lookup_column.py" code={`import ray
 COUNTRY_NAMES = {
@@ -180,9 +180,9 @@ ds = ds.map_batches(enrich, batch_format="pandas")
 
 ---
 
-## 9. Deduplication by Key
+## 9. Deduplication by key
 
-**When to use:** Your data has duplicate rows and you want to keep only the first (or last) occurrence per key.
+Use when your data has duplicate rows and you want to keep only the first (or last) occurrence per key.
 
 <CodeBlock language="python" filename="dedup.py" code={`import ray
 ds = ray.data.read_parquet("events.parquet")
@@ -196,9 +196,9 @@ ds = ds.groupby("user_id").map_groups(keep_first, batch_format="pandas")
 
 ---
 
-## 10. Streaming Large Datasets with Backpressure
+## 10. Streaming large datasets with backpressure
 
-**When to use:** Your data does not fit in memory. Ray Data streams by default, but you can tune block size and execution options for tighter memory control.
+Use when your data does not fit in memory. Ray Data streams by default, but you can tune block size and execution options for tighter memory control.
 
 <CodeBlock language="python" filename="streaming.py" code={`import ray
 from ray.data import DataContext
@@ -215,9 +215,9 @@ for batch in ds.iter_batches(batch_size=1024):
 
 ---
 
-## 11. Converting Between Pandas, Arrow, and NumPy
+## 11. Converting between Pandas, Arrow, and NumPy
 
-**When to use:** You need to move data between Ray Data and other libraries, or convert formats within a pipeline.
+Use when you need to move data between Ray Data and other libraries, or convert formats within a pipeline.
 
 <CodeBlock language="python" filename="format_conversion.py" code={`import ray
 import pandas as pd
@@ -237,9 +237,9 @@ ds.map_batches(fn, batch_format="numpy")    # fn gets dict[str, np.ndarray]
 
 ---
 
-## 12. Parallel Download and Processing Pipeline
+## 12. Parallel download and processing pipeline
 
-**When to use:** You need to download files from URLs and process them in parallel. Use `map_batches` with concurrency to control parallelism.
+Use when you need to download files from URLs and process them in parallel. `map_batches` with concurrency controls parallelism.
 
 <CodeBlock language="python" filename="download_pipeline.py" code={`import ray
 import requests
@@ -268,7 +268,7 @@ ds.write_parquet("downloaded_pages/")
 
 ---
 
-## Quick Pattern Index
+## Quick pattern index
 
 | # | Pattern | Key API |
 |---|---------|---------|

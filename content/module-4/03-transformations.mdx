@@ -19,7 +19,7 @@ quiz:
     explanation: "flat_map is for one-to-many transformations — when a single input row should produce zero, one, or multiple output rows. For example, splitting a document into sentences."
 ---
 
-## The Transformation Toolkit
+## Transformation methods
 
 Ray Data provides several transformation methods. Each one distributes work across your cluster automatically.
 
@@ -31,7 +31,7 @@ Ray Data provides several transformation methods. Each one distributes work acro
     style DS2 fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## map — Row-by-Row
+## map: row-by-row
 
 The `map` method applies a function to each row. Each row is a Python dictionary.
 
@@ -52,9 +52,9 @@ ds.show()
 # {'text': 'Hello World', 'label': 1, 'text_length': 11}
 # {'text': 'Ray Data', 'label': 0, 'text_length': 8}`} />
 
-## map_batches — Vectorized Processing
+## map_batches: vectorized processing
 
-`map_batches` is the workhorse. Your function receives a pandas DataFrame (or Arrow table) and should return one. This enables fast vectorized operations.
+`map_batches` handles the bulk of real work. Your function receives a pandas DataFrame (or Arrow table) and should return one. This enables vectorized operations that are much faster than row-at-a-time processing.
 
 <CodeBlock language="python" code={`import pandas as pd
 
@@ -78,7 +78,7 @@ class Predictor:
 
 ds = ds.map_batches(Predictor, concurrency=4, num_gpus=1)`} />
 
-## flat_map — One-to-Many
+## flat_map: one-to-many
 
 Use `flat_map` when one input row should produce multiple output rows.
 
@@ -97,7 +97,7 @@ ds.show(4)
 # {'word': 'How'}
 # {'word': 'are'}`} />
 
-## filter — Keep Matching Rows
+## filter: keep matching rows
 
 <CodeBlock language="python" code={`ds = ray.data.from_items([
     {"name": "Alice", "score": 85},
@@ -110,7 +110,7 @@ ds.show()
 # {'name': 'Alice', 'score': 85}
 # {'name': 'Carol', 'score': 91}`} />
 
-## add_column — Quick Column Addition
+## add_column: quick column addition
 
 A shortcut for adding a computed column without writing a full map function.
 
@@ -120,7 +120,7 @@ ds.show()
 # {'price': 100, 'price_with_tax': 110.0}
 # {'price': 200, 'price_with_tax': 220.0}`} />
 
-## Choosing the Right Method
+## Choosing the right method
 
 | Method | Input | Output | Best For |
 |--------|-------|--------|----------|

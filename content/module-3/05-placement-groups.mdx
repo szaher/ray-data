@@ -19,9 +19,9 @@ quiz:
     explanation: "Custom resources are arbitrary labels (like 'special_hardware' or 'region:us-east') with numeric capacities. Ray uses them for scheduling decisions but does not verify the underlying hardware — they are a logical abstraction."
 ---
 
-## Custom Resources
+## Custom resources
 
-Beyond CPUs and GPUs, Ray lets you define **custom resources** — arbitrary labels that control where tasks and actors run. Ray does not verify these labels; they are a scheduling contract.
+Beyond CPUs and GPUs, Ray lets you define **custom resources**: arbitrary labels that control where tasks and actors run. Ray does not verify these labels. They are a scheduling contract.
 
 <CodeBlock language="python" code={`# Start Ray with custom resources
 ray.init(resources={"special_hardware": 2, "region:us-east": 1})
@@ -38,11 +38,11 @@ ref = use_special_hardware.remote(my_data)
 
 Custom resources are useful for routing work to nodes with specific hardware (FPGAs, high-memory machines) or logical attributes (availability zone, data locality).
 
-## What Are Placement Groups?
+## What are placement groups?
 
 A **placement group** reserves a set of resources (called **bundles**) across the cluster as a unit. You decide _how_ those bundles are distributed using a **scheduling strategy**.
 
-Think of it as reserving a block of hotel rooms: you can request them all on the same floor (PACK), spread across floors (SPREAD), or strictly one per floor (STRICT_SPREAD).
+Think of it like reserving hotel rooms: you can request them all on the same floor (PACK), spread across floors (SPREAD), or strictly one per floor (STRICT_SPREAD).
 
 <MermaidDiagram chart={`graph TD
     PG[Placement Group\n3 Bundles x 2 CPUs] --> S{Strategy?}
@@ -56,16 +56,16 @@ Think of it as reserving a block of hotel rooms: you can request them all on the
     style N3 fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Scheduling Strategies
+## Scheduling strategies
 
 | Strategy | Behavior | Use Case |
 |---|---|---|
 | **PACK** | Fit bundles onto as few nodes as possible | Minimize inter-node communication |
 | **SPREAD** | Distribute bundles across different nodes | Fault tolerance, load balancing |
-| **STRICT_PACK** | All bundles must be on one node — fail otherwise | Gang scheduling on single node |
-| **STRICT_SPREAD** | Each bundle on a unique node — fail otherwise | Guaranteed isolation |
+| **STRICT_PACK** | All bundles must be on one node; fails otherwise | Gang scheduling on single node |
+| **STRICT_SPREAD** | Each bundle on a unique node; fails otherwise | Guaranteed isolation |
 
-## Creating and Using Placement Groups
+## Creating and using placement groups
 
 <CodeBlock language="python" code={`from ray.util.placement_group import placement_group, remove_placement_group
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -100,9 +100,9 @@ for i in range(3):
 results = ray.get(refs)
 `} />
 
-## Real-World Example: Distributed Training
+## Example: distributed training
 
-Placement groups are essential for distributed training where each worker needs a GPU on a **separate** node to maximize aggregate memory bandwidth:
+Placement groups are well-suited for distributed training where each worker needs a GPU on a **separate** node to maximize aggregate memory bandwidth:
 
 <CodeBlock language="python" code={`# Reserve 4 GPUs across 4 different nodes
 bundles = [{"CPU": 4, "GPU": 1} for _ in range(4)]
@@ -131,7 +131,7 @@ for rank in range(4):
 
 ## Cleanup
 
-Placement groups hold reserved resources. Always clean up when done:
+Placement groups hold reserved resources, so clean up when done:
 
 <CodeBlock language="python" code={`# Remove the placement group to release resources
 remove_placement_group(pg)
@@ -139,4 +139,4 @@ remove_placement_group(pg)
 # Placement groups are also removed when their creator exits
 `} />
 
-Placement groups and custom resources give you precise control over **where** your computation runs — critical for performance-sensitive workloads like distributed training, latency-sensitive serving, and multi-tenant clusters.
+Placement groups and custom resources give you control over **where** computation runs. This matters for distributed training, latency-sensitive serving, and multi-tenant clusters.

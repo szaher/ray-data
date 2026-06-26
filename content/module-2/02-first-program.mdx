@@ -19,9 +19,9 @@ quiz:
     explanation: "Calling greet('Alice') without .remote() bypasses Ray entirely and runs the function as a regular Python call on the driver process. You must use .remote() to dispatch work to Ray workers."
 ---
 
-## Your First Ray Program in 5 Lines
+## Your first Ray program in 5 lines
 
-You have Ray installed. Now let's use it. The goal is simple: run a function on a Ray worker instead of your local Python process.
+You have Ray installed. Now put it to use. The goal: run a function on a Ray worker instead of your local Python process.
 
 <CodeBlock code={`import ray
 ray.init()
@@ -32,17 +32,17 @@ result = ray.get(hello.remote("Alice"))
 print(result)
 # Hello, Alice! I ran on a Ray worker.`} language="python" filename="first_ray.py" />
 
-That's it. Six lines and you've distributed a function. Let's break down each piece.
+Six lines and you've distributed a function. Here's what each piece does.
 
-## What ray.init() Does
+## What ray.init() does
 
 `ray.init()` starts a **local Ray cluster** on your machine. Behind the scenes, it launches several processes:
 
-- A **driver** process — your Python script
-- **Worker** processes — one per CPU core, ready to execute tasks
-- An **object store** — shared memory for passing data between workers
-- The **Global Control Store (GCS)** — tracks cluster state
-- A **dashboard** — a web UI at `http://127.0.0.1:8265`
+- A **driver** process, your Python script
+- **Worker** processes, one per CPU core, ready to execute tasks
+- An **object store** for shared memory between workers
+- The **Global Control Store (GCS)** for tracking cluster state
+- A **dashboard** web UI at `http://127.0.0.1:8265`
 
 <MermaidDiagram chart={`graph TD
     subgraph "Your Machine (after ray.init)"
@@ -84,9 +84,9 @@ print(ray.cluster_resources())
 # {'CPU': 8, 'memory': 17179869184, 'node:127.0.0.1': 1.0}
 # ^ 8 cores available        ^ 16 GB of shared memory`} language="python" filename="check_resources.py" />
 
-## The @ray.remote Decorator
+## The @ray.remote decorator
 
-The `@ray.remote` decorator tells Ray: "This function can run on any worker." It doesn't change what the function does — it changes **where** and **how** it runs.
+The `@ray.remote` decorator tells Ray: "This function can run on any worker." It doesn't change what the function does. It changes **where** and **how** it runs.
 
 <CodeBlock code={`# Without @ray.remote: runs locally on the driver
 def square(x):
@@ -99,11 +99,11 @@ def square(x):
 ref = square.remote(4)  # Returns immediately with an ObjectRef
 result = ray.get(ref)   # Blocks until the worker finishes → 16`} language="python" filename="remote_decorator.py" />
 
-Notice the key difference: `square.remote(4)` does **not** return `16`. It returns an **ObjectRef** — a future that points to the result in the object store. You need `ray.get()` to retrieve the actual value.
+Notice the key difference: `square.remote(4)` does **not** return `16`. It returns an **ObjectRef**, a future that points to the result in the object store. You need `ray.get()` to retrieve the actual value.
 
-## ray.get() Retrieves Results
+## ray.get() retrieves results
 
-`ray.get()` blocks until the result is ready, then pulls it from the object store into your driver process. You can pass a single ref or a list of refs:
+`ray.get()` blocks until the result is ready, then pulls it from the object store into your driver process. You can pass a single ref or a list:
 
 <CodeBlock code={`import ray
 ray.init()
@@ -118,13 +118,13 @@ print(results)  # [0, 2, 4, 6]`} language="python" filename="parallel_tasks.py" 
 
 All four calls to `double.remote()` return instantly. Ray schedules them across your CPU cores. `ray.get(refs)` waits for all four to finish and returns the results in order.
 
-## Check the Ray Dashboard
+## Check the Ray dashboard
 
 While your script is running (or right after `ray.init()`), open your browser to:
 
 **http://127.0.0.1:8265**
 
-The dashboard shows your cluster's CPU/memory usage, running tasks, logs, and more. It's invaluable for debugging. You'll see your tasks appear under the "Jobs" tab.
+The dashboard shows your cluster's CPU/memory usage, running tasks, logs, and more. You'll see your tasks appear under the "Jobs" tab.
 
 <CodeBlock code={`import ray
 # ray.init() returns a context with the dashboard URL
@@ -132,9 +132,9 @@ context = ray.init()
 print(f"Dashboard: http://{context.dashboard_url}")
 # Dashboard: http://127.0.0.1:8265`} language="python" filename="dashboard_url.py" />
 
-## Common First-Time Gotchas
+## Common first-time gotchas
 
-These three mistakes trip up every beginner. Learn them now so they don't slow you down later.
+These three mistakes trip up every beginner.
 
 **Gotcha 1: Forgetting .remote()**
 
@@ -174,7 +174,7 @@ results = ray.get(refs)  # All 100 run in parallel`} language="python" filename=
 
 The pattern to remember: **submit many, get once**. Fire off all your `.remote()` calls first, collect the refs, then call `ray.get()` on the whole list.
 
-## Shutting Down
+## Shutting down
 
 When your script finishes, shut down Ray to free system resources:
 
@@ -185,4 +185,4 @@ with ray.init():
     print(ray.get(ref))
 # Ray is shut down here automatically`} language="python" filename="shutdown.py" />
 
-You now know the three fundamental Ray APIs: `ray.init()`, `.remote()`, and `ray.get()`. In the next lesson, you'll use these foundations to build your first data pipeline with Ray Data.
+You now know the three fundamental Ray APIs: `ray.init()`, `.remote()`, and `ray.get()`. Next, you'll use them to build your first data pipeline with Ray Data.

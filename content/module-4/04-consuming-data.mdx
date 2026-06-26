@@ -19,9 +19,9 @@ quiz:
     explanation: "iter_batches with a specified batch_size and batch_format='numpy' gives you streaming numpy arrays that can be directly converted to tensors — the standard pattern for feeding ML training loops."
 ---
 
-## From Dataset to Results
+## From Dataset to results
 
-After building your transformation pipeline, you need to consume the results. Ray Data gives you two categories of consumers: **iterators** for streaming and **writers** for persistence.
+After building a transformation pipeline, you consume the results. Ray Data provides two categories of consumers: **iterators** for streaming and **writers** for persistence.
 
 <MermaidDiagram chart={`graph TD
     DS[Dataset] --> IT[Iterators]
@@ -39,7 +39,7 @@ After building your transformation pipeline, you need to consume the results. Ra
     style PK fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Peeking at Data: show and take
+## Peeking at data: show and take
 
 Use these for quick inspection during development. They trigger execution but only read a small amount of data.
 
@@ -57,7 +57,7 @@ ds.show(3)
 rows = ds.take(5)
 print(rows[0])  # {'name': 'Alice', 'age': 30, 'city': 'NYC'}`} />
 
-## Streaming Iteration: iter_rows and iter_batches
+## Streaming iteration: iter_rows and iter_batches
 
 For production workloads, iterate through data in a streaming fashion. This avoids loading the entire dataset into memory.
 
@@ -75,9 +75,9 @@ for batch in ds.iter_batches(batch_size=64, batch_format="numpy"):
     labels = batch["labels"]      # numpy array
     # Convert to torch tensors, train your model, etc.`} />
 
-## Writing Data to Disk
+## Writing data to disk
 
-Write your processed data out to files. Ray Data writes in parallel, creating one file per block.
+Write processed data out to files. Ray Data writes in parallel, creating one file per block.
 
 <CodeBlock language="python" code={`# Write to Parquet — best for downstream ML pipelines
 ds.write_parquet("s3://bucket/processed/output/")
@@ -91,9 +91,9 @@ ds.write_json("/tmp/output_json/")
 # Control the number of output files
 ds.repartition(10).write_parquet("s3://bucket/output/")`} />
 
-## The ML Training Pattern
+## The ML training pattern
 
-The most common consumption pattern in Ray Data is feeding an ML training loop. Here is the standard approach.
+The most common consumption pattern is feeding an ML training loop:
 
 <CodeBlock language="python" code={`import ray
 
@@ -108,7 +108,7 @@ for epoch in range(10):
         loss = train_step(features, labels)
     print(f"Epoch {epoch}: loss={loss:.4f}")`} />
 
-## Consumer Summary
+## Consumer summary
 
 | Method | Returns | Use Case |
 |--------|---------|----------|

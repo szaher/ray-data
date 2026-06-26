@@ -19,9 +19,9 @@ quiz:
     explanation: "The Jobs tab's task timeline provides a Gantt-chart view of every task's start time and duration. Straggler tasks appear as long bars that extend far beyond the cluster of short bars, making them easy to spot visually."
 ---
 
-## A Systematic Approach to Debugging
+## A systematic approach to debugging
 
-When a Ray Data pipeline fails, hangs, or performs poorly, the dashboard is your primary diagnostic tool. Instead of guessing, follow a systematic workflow: **observe the symptom, go to the right tab, form a diagnosis, apply a fix**.
+When a Ray Data pipeline fails, hangs, or performs poorly, the dashboard is your primary diagnostic tool. Rather than guessing, follow a systematic workflow: observe the symptom, go to the right tab, form a diagnosis, apply a fix.
 
 <MermaidDiagram chart={`flowchart TD
     START["Pipeline Problem"] --> SYM{"What is the\nsymptom?"}
@@ -55,17 +55,17 @@ When a Ray Data pipeline fails, hangs, or performs poorly, the dashboard is your
     style FIX3B fill:#68d391,stroke:#68d391,color:#1a1d27
     style FIX4 fill:#68d391,stroke:#68d391,color:#1a1d27`} />
 
-## Diagnosing Out-of-Memory (OOM)
+## Diagnosing out-of-memory (OOM)
 
 OOM is the most common failure mode for data pipelines. The dashboard gives you multiple signals before a hard crash occurs.
 
-**Step 1: Check the Metrics tab.** Look at the object store memory graph. If it is climbing toward the limit (default is 30% of system memory), your pipeline is producing blocks faster than it can consume them. The `ray_data_spilled_bytes` metric tells you if spilling has started — once spilling begins, performance degrades significantly.
+**Step 1: Check the Metrics tab.** Look at the object store memory graph. If it is climbing toward the limit (default is 30% of system memory), your pipeline is producing blocks faster than it can consume them. The `ray_data_spilled_bytes` metric tells you if spilling has started. Once spilling begins, performance degrades significantly.
 
 **Step 2: Check the Cluster tab.** Look at the system memory column for each node. If any node shows memory usage above 90%, that node is at risk of OOM. The operating system may kill Ray worker processes, which appear as DEAD workers.
 
 **Step 3: Check the Jobs tab.** If a task was OOM-killed, the job will show a failed task with an error message like `Worker killed by OOM killer` or `RayOutOfMemoryError`. Click into the failed task to see which operator and which block triggered the failure.
 
-**Common fixes for OOM:**
+Common fixes for OOM:
 
 <CodeBlock code={`import ray
 # Fix 1: Reduce block size so fewer bytes are in flight
@@ -85,7 +85,7 @@ ray.init(
 for batch in ds.iter_batches(batch_size=1024):
     process_and_save(batch)`} language="python" filename="fix_oom.py" />
 
-## Finding Straggler Tasks
+## Finding straggler tasks
 
 Stragglers are tasks that take much longer than their peers, holding up the entire pipeline. They are easy to spot in the dashboard.
 
@@ -118,9 +118,9 @@ result = ds.map(transform).materialize()
 # Diagnosis: Check Cluster tab for the straggler's node
 # Fix: Isolate Ray workers with cgroups or dedicated nodes`} language="python" filename="fix_stragglers.py" />
 
-## Reading Error Traces
+## Reading error traces
 
-When a job fails, the Jobs tab shows the complete Python traceback. Here is how to extract maximum information from it.
+When a job fails, the Jobs tab shows the complete Python traceback. Here is how to get the most out of it.
 
 **Step 1: Open the Jobs tab** and find the failed job (status: FAILED, shown in red).
 
@@ -161,17 +161,17 @@ ds = ds.map(lambda row: {
 # Fix: Specify runtime environment
 ray.init(runtime_env={"pip": ["transformers"]})`} language="python" filename="common_errors.py" />
 
-## Log Viewing
+## Log viewing
 
 The Dashboard's Logs tab gives you access to stdout and stderr from every process in the cluster without SSH access.
 
-**Navigation:** The Logs tab has a file browser on the left showing log files organized by node. Each node has:
-- `raylet.out` / `raylet.err` — the raylet scheduler logs
-- `gcs_server.out` / `gcs_server.err` — GCS logs (head node only)
-- `worker-*.out` / `worker-*.err` — one file per worker process
-- `dashboard.log` — dashboard server logs
+**Navigation.** The Logs tab has a file browser on the left showing log files organized by node. Each node has:
+- `raylet.out` / `raylet.err` for the raylet scheduler logs
+- `gcs_server.out` / `gcs_server.err` for GCS logs (head node only)
+- `worker-*.out` / `worker-*.err`, one file per worker process
+- `dashboard.log` for dashboard server logs
 
-**Finding task logs:** When you click into a specific task from the Jobs tab, a "View Logs" link takes you directly to the worker log file that contains that task's output. Any `print()` statements in your UDF appear here.
+**Finding task logs.** When you click into a specific task from the Jobs tab, a "View Logs" link takes you directly to the worker log file that contains that task's output. Any `print()` statements in your UDF appear here.
 
 <CodeBlock code={`import ray
 # Everything printed in a task appears in the Logs tab
@@ -192,29 +192,29 @@ def better_debug_transform(batch):
     logger.debug(f"Schema: {list(batch.keys())}")
     return transform(batch)`} language="python" filename="debug_logging.py" />
 
-## Actor Debugging
+## Actor debugging
 
-Actors are long-running stateful objects that can fail, restart, and accumulate state over time. The Actors tab is purpose-built for debugging them.
+Actors are long-running stateful objects that can fail, restart, and accumulate state over time. The Actors tab is built for debugging them.
 
-**What you see for each actor:**
+What you see for each actor:
 - **Class name** and **actor ID**
-- **State** — ALIVE, DEAD, or RESTARTING
-- **Node IP** — which machine it runs on
-- **Restart count** — how many times it has been restarted (if `max_restarts` is set)
-- **Resource usage** — CPU and memory consumed by this actor
-- **Pending calls** — number of method calls waiting in the actor's queue
+- **State**: ALIVE, DEAD, or RESTARTING
+- **Node IP**, which machine it runs on
+- **Restart count**, how many times it has been restarted (if `max_restarts` is set)
+- **Resource usage**, CPU and memory consumed by this actor
+- **Pending calls**, number of method calls waiting in the actor's queue
 
-**Common actor problems:**
+Common actor problems:
 
-- **Actor keeps restarting** — high restart count with ALIVE state means the actor crashes and auto-recovers. Check its logs for the crash cause. Each restart loses in-memory state unless you implement checkpointing.
+**Actor keeps restarting.** A high restart count with ALIVE state means the actor crashes and auto-recovers. Check its logs for the crash cause. Each restart loses in-memory state unless you implement checkpointing.
 
-- **Actor is DEAD** — it crashed and was not configured to restart. Click the actor to see the death cause. Set `max_restarts` to enable automatic recovery.
+**Actor is DEAD.** It crashed and was not configured to restart. Click the actor to see the death cause. Set `max_restarts` to enable automatic recovery.
 
-- **Actor queue growing** — a rising number of pending calls means the actor cannot process requests fast enough. Consider increasing `max_concurrency` or sharding across multiple actor replicas.
+**Actor queue growing.** A rising number of pending calls means the actor cannot process requests fast enough. Consider increasing `max_concurrency` or sharding across multiple actor replicas.
 
-## The Complete Debugging Workflow
+## The complete debugging workflow
 
-Here is a step-by-step checklist you can follow whenever a pipeline has problems:
+A step-by-step checklist for when a pipeline has problems:
 
 <CodeBlock code={`# Step 1: Get the high-level status
 # Open Dashboard -> Jobs tab
@@ -247,7 +247,7 @@ print(stats)
 # - High spilled bytes
 # - Low throughput on specific operators`} language="python" filename="debug_checklist.py" />
 
-## Summary: Dashboard Tab Quick Reference
+## Dashboard tab quick reference
 
 | Symptom | Go To | Look For |
 |---------|-------|----------|

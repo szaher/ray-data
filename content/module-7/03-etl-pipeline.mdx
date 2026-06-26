@@ -19,9 +19,9 @@ quiz:
     explanation: "Partition pruning lets query engines skip entire file groups that don't match filter predicates — dramatically reducing I/O for selective queries."
 ---
 
-## Building a Production ETL Pipeline
+## Building a production ETL pipeline
 
-ETL is the bread and butter of data engineering. Ray Data excels here because it streams data without materializing entire datasets in memory.
+Ray Data streams data without materializing entire datasets in memory, which makes it well-suited for ETL workloads.
 
 <MermaidDiagram chart={`graph LR
     A[Read Events\nParquet] --> C[Clean & Validate]
@@ -36,7 +36,7 @@ ETL is the bread and butter of data engineering. Ray Data excels here because it
     style F fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Step 1 — Extract from Multiple Sources
+## Step 1: extract from multiple sources
 
 <CodeBlock language="python" code={`import ray
 
@@ -47,7 +47,7 @@ users_list = ray.data.read_csv("s3://datalake/dim/users.csv").take_all()
 user_lookup = {u["user_id"]: u for u in users_list}
 `} />
 
-## Step 2 — Clean, Validate, Enrich
+## Step 2: clean, validate, enrich
 
 <CodeBlock language="python" code={`import numpy as np
 
@@ -71,7 +71,7 @@ events = events.map_batches(clean, batch_format="numpy")
 events = events.map_batches(enrich, batch_format="numpy")
 `} />
 
-## Step 3 — Write Partitioned Output
+## Step 3: write partitioned output
 
 <CodeBlock language="python" code={`def add_date_partition(batch: dict) -> dict:
     batch["date"] = np.array([ts.decode()[:10] for ts in batch["timestamp"]])
@@ -81,7 +81,7 @@ events = events.map_batches(add_date_partition, batch_format="numpy")
 events.write_parquet("s3://datalake/curated/events/", partition_cols=["date", "country"])
 `} />
 
-## Data Flow
+## Data flow
 
 <MermaidDiagram chart={`graph TD
     RAW["Raw Zone\ns3://datalake/raw/"] --> PIPE["Ray Data Pipeline\nClean -> Enrich -> Partition"]
@@ -93,4 +93,4 @@ events.write_parquet("s3://datalake/curated/events/", partition_cols=["date", "c
     style CURATED fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-Key takeaways: use the **broadcast-join pattern** (materialize small table, reference in `map_batches`) for enrichment; use **partition_cols** on write to enable downstream partition pruning.
+Use the broadcast-join pattern (materialize a small table, reference it in `map_batches`) for enrichment. Use `partition_cols` on write to enable downstream partition pruning.

@@ -19,11 +19,11 @@ quiz:
     explanation: "CPU cores on the same machine communicate via shared memory, not network. Network bandwidth is a concern in distributed systems, not single-machine processing."
 ---
 
-## The Problem: Why One Machine Isn't Enough
+## The problem: why one machine isn't enough
 
 Imagine you have a dataset of 10 billion rows. At 100 bytes per row, that's **1 terabyte** of data. Your laptop has 16 GB of RAM. You can't even load the data, let alone process it.
 
-This is the fundamental problem distributed computing solves: **when your data or computation exceeds what a single machine can handle**.
+Distributed computing solves this: **when your data or computation exceeds what a single machine can handle**, you spread the work across many machines.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Single Machine"
@@ -40,7 +40,7 @@ This is the fundamental problem distributed computing solves: **when your data o
     style C fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## The Solution: Use More Machines
+## The solution: use more machines
 
 Instead of one machine with 16 GB, use **64 machines** with 16 GB each. Now you have 1 TB of combined RAM. Split the data across all machines, process in parallel, combine the results.
 
@@ -59,21 +59,21 @@ Instead of one machine with 16 GB, use **64 machines** with 16 GB each. Now you 
     style R fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Three Reasons You Need Distribution
+## Three reasons you need distribution
 
-**1. Data doesn't fit in memory** — Your dataset is larger than any single machine's RAM. You need to spread it across many machines.
+**1. Data doesn't fit in memory.** Your dataset is larger than any single machine's RAM, so you spread it across many machines.
 
-**2. Computation takes too long** — Processing 1 TB on 4 cores might take 10 hours. On 256 cores across 64 machines, it takes ~10 minutes.
+**2. Computation takes too long.** Processing 1 TB on 4 cores might take 10 hours. On 256 cores across 64 machines, it takes roughly 10 minutes.
 
-**3. Fault tolerance** — If one machine dies, you don't lose everything. The work can be redistributed.
+**3. Fault tolerance.** If one machine dies, you don't lose everything. The work can be redistributed.
 
-## The Challenge
+## The challenge
 
-Distributed computing sounds simple — just split the work! But it introduces hard problems:
+Distributed computing sounds simple: just split the work. But it introduces hard problems:
 
-- **How do you split the data?** Not all splits are equal.
-- **How do machines communicate?** Network is 1000x slower than memory.
-- **What happens when a machine fails?** Mid-computation.
-- **How do you collect results?** Some operations (like sorting) need coordination.
+- How do you split the data? Not all splits are equal.
+- How do machines communicate? Network is 1000x slower than memory.
+- What happens when a machine fails mid-computation?
+- How do you collect results? Some operations (like sorting) need coordination.
 
-This is what frameworks like **Ray** solve for you. Instead of managing machines, networks, and failures yourself, you write Python code and Ray handles the distribution.
+Frameworks like **Ray** solve these problems for you. Instead of managing machines, networks, and failures yourself, you write Python code and Ray handles the distribution.

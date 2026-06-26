@@ -19,9 +19,9 @@ quiz:
     explanation: "materialize() forces full computation and pins blocks in the object store. This acts as a checkpoint — if downstream stages fail, they only need to recompute from the materialized point rather than all the way back to the original source."
 ---
 
-## Failures Are Inevitable at Scale
+## Failures are inevitable at scale
 
-When processing terabytes across dozens of machines, node failures, preemptions, and OOM kills are normal. Ray Data is designed to recover transparently using **task-level retries** and **lineage-based reconstruction**.
+When processing terabytes across dozens of machines, node failures, preemptions, and OOM kills are normal. Ray Data recovers transparently using task-level retries and lineage-based reconstruction.
 
 <MermaidDiagram chart={`graph TD
     R["Read Block A"] --> M1["Map Task 1"]
@@ -38,9 +38,9 @@ When processing terabytes across dozens of machines, node failures, preemptions,
     style R3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} />
 
-## Block-Level Retries
+## Block-level retries
 
-Ray Data retries at the **task level**, not the job level. Each task processes one or more blocks. When a task fails (worker crash, OOM, application error), the executor retries just that task on a different worker.
+Ray Data retries at the task level, not the job level. Each task processes one or more blocks. When a task fails (worker crash, OOM, application error), the executor retries just that task on a different worker.
 
 <CodeBlock language="python" code={`import ray
 
@@ -57,9 +57,9 @@ ds = ray.data.read_parquet("s3://bucket/data/").map_batches(
     # if the worker crashes or raises an exception
 )`} />
 
-## Lineage Reconstruction
+## Lineage reconstruction
 
-When a worker holding computed blocks dies, those blocks are lost from the object store. Ray Data reconstructs them using **lineage** — the recorded chain of operations and inputs that produced each block.
+When a worker holding computed blocks dies, those blocks are lost from the object store. Ray Data reconstructs them using lineage: the recorded chain of operations and inputs that produced each block.
 
 <MermaidDiagram chart={`graph LR
     SRC["Source File\n(durable)"] -->|"lineage"| B1["Block v1\n(lost)"]
@@ -93,7 +93,7 @@ ds = ds.map_batches(expensive_parse).materialize()    # checkpoint!
 ds = ds.map_batches(expensive_transform).materialize() # checkpoint!
 ds = ds.map_batches(expensive_inference)  # failure only re-runs this`} />
 
-## Configuring Fault Tolerance
+## Configuring fault tolerance
 
 <CodeBlock language="python" code={`import ray
 
@@ -117,9 +117,9 @@ ds = ray.data.read_parquet("s3://checkpoint/stage1/")
 ds = ds.map_batches(stage_2)
 ds.write_parquet("s3://output/")`} />
 
-## Best Practices
+## Best practices
 
-- **Keep transforms idempotent** — retries re-execute your function, so avoid side effects that can't be repeated safely.
-- **Checkpoint before expensive stages** — use `materialize()` or write to durable storage to limit recomputation.
-- **Use durable sources** — lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
-- **Monitor retries** — excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.
+- Keep transforms idempotent. Retries re-execute your function, so avoid side effects that can't be repeated safely.
+- Checkpoint before expensive stages. Use `materialize()` or write to durable storage to limit recomputation.
+- Use durable sources. Lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
+- Monitor retries. Excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.

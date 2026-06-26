@@ -19,9 +19,9 @@ quiz:
     explanation: "Spark Driver is a component of Apache Spark, not Ray. The head node runs the GCS, dashboard, autoscaler, and a raylet."
 ---
 
-## Starting Ray: Your First Line of Code
+## Starting Ray
 
-Every Ray program begins with a single call: `ray.init()`. This connects your Python process to a Ray cluster — or creates one if none exists.
+Every Ray program begins with `ray.init()`. This call connects your Python process to a Ray cluster, or creates one if none exists.
 
 <CodeBlock language="python" code={`import ray
 
@@ -35,11 +35,11 @@ ray.init(address="ray://my-cluster:10001")
 ray.init(runtime_env={"pip": ["pandas", "pyarrow"]})
 `} />
 
-## Local Mode vs Cluster Mode
+## Local mode vs cluster mode
 
-When you call `ray.init()` with no address, Ray starts a **local cluster** on your machine. Every CPU core becomes a worker. This is perfect for development and testing.
+When you call `ray.init()` with no address, Ray starts a **local cluster** on your machine. Every CPU core becomes a worker. Good for development and testing.
 
-In production, you connect to a **remote cluster** — multiple machines coordinated by a head node.
+In production, you connect to a **remote cluster**, where multiple machines are coordinated by a head node.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Local Mode: ray.init()"
@@ -60,13 +60,13 @@ In production, you connect to a **remote cluster** — multiple machines coordin
     style W3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## Anatomy of a Ray Cluster
+## Anatomy of a Ray cluster
 
-A Ray cluster has two types of nodes:
+A Ray cluster has two types of nodes.
 
-**Head Node** — runs the Global Control Store (GCS), the dashboard, and the autoscaler. There is exactly one head node per cluster.
+The **head node** runs the Global Control Store (GCS), the dashboard, and the autoscaler. There is exactly one head node per cluster.
 
-**Worker Nodes** — run your tasks and actors. Each node has a **raylet** (scheduler + resource manager) and a local **object store** (shared memory).
+**Worker nodes** run your tasks and actors. Each node has a **raylet** (scheduler + resource manager) and a local **object store** (shared memory).
 
 <MermaidDiagram chart={`graph LR
     subgraph "Head Node"
@@ -88,7 +88,7 @@ A Ray cluster has two types of nodes:
     style R2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## The Ray Dashboard
+## The Ray dashboard
 
 Every cluster exposes a dashboard at **port 8265**. It shows running jobs, resource utilization, logs, and the state of actors and tasks.
 
@@ -102,9 +102,9 @@ print(ray.cluster_resources())
 # {'CPU': 8, 'memory': 17179869184, 'node:127.0.0.1': 1.0}
 `} />
 
-## Shutting Down
+## Shutting down
 
-Always shut down Ray when you're done to free resources:
+Shut down Ray when you're done to free resources:
 
 <CodeBlock language="python" code={`# Explicit shutdown
 ray.shutdown()
@@ -116,4 +116,4 @@ with ray.init() as context:
 # Ray is automatically shut down here
 `} />
 
-Ray also supports **runtime environments** — you can specify pip packages, environment variables, and working directories that get installed on every worker, ensuring reproducibility across the cluster.
+Ray also supports **runtime environments**. You can specify pip packages, environment variables, and working directories that get installed on every worker, ensuring reproducibility across the cluster.

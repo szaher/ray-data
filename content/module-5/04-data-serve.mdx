@@ -19,9 +19,9 @@ quiz:
     explanation: "Training-serving skew occurs when preprocessing differs between training and inference, leading to degraded model accuracy. Reusing the same Ray Data preprocessors guarantees consistency."
 ---
 
-## From Training to Serving
+## From training to serving
 
-A common production pitfall is **training-serving skew** -- the model was trained with one preprocessing pipeline, but serves with a different one. Ray Data lets you define preprocessing once and reuse it in both contexts.
+A common production pitfall is training-serving skew: the model was trained with one preprocessing pipeline but serves with a different one. Ray Data lets you define preprocessing once and reuse it in both contexts.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Training Pipeline"
@@ -38,9 +38,9 @@ A common production pitfall is **training-serving skew** -- the model was traine
     style RESP fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
 `} />
 
-## A Basic Ray Serve Deployment
+## A basic Ray Serve deployment
 
-Ray Serve deployments are Python classes decorated with `@serve.deployment`. You load the model in `__init__` and handle requests in `__call__`.
+Ray Serve deployments are Python classes decorated with `@serve.deployment`. Load the model in `__init__` and handle requests in `__call__`.
 
 <CodeBlock language="python" code={`import ray
 from ray import serve
@@ -65,7 +65,7 @@ class TextClassifier:
 app = TextClassifier.bind()
 serve.run(app)`} />
 
-## Composing a Multi-Stage Pipeline
+## Composing a multi-stage pipeline
 
 For multi-step pipelines, compose deployments using `.bind()`. The preprocessor handles tokenization before the model runs inference.
 
@@ -101,7 +101,7 @@ preprocessor = Preprocessor.bind()
 app = ModelInference.bind(preprocessor)
 serve.run(app)`} />
 
-## Deployment Architecture
+## Deployment architecture
 
 <MermaidDiagram chart={`graph TD
     CLIENT["HTTP Client"] --> INGRESS["Ray Serve Ingress"]
@@ -119,4 +119,4 @@ serve.run(app)`} />
     style M2 fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-**Key pattern:** CPU-intensive preprocessing scales on cheap CPU replicas, while expensive GPU inference runs on dedicated GPU replicas. Ray Serve autoscales each stage independently based on load.
+CPU-bound preprocessing scales on cheap CPU replicas while GPU inference runs on dedicated GPU replicas. Ray Serve autoscales each stage independently based on load.

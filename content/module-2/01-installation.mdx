@@ -19,20 +19,20 @@ quiz:
     explanation: "Ray 2.55 requires Python 3.9 or higher. Python 3.8 and earlier are no longer supported. It's recommended to use Python 3.10 or 3.11 for the best experience."
 ---
 
-## What You Need
+## What you need
 
-Before writing any Ray code, you need three things: **Python 3.9+**, a **virtual environment**, and the **ray[data] package**. This lesson walks through each step so you start on solid ground.
+Before writing any Ray code, you need three things: **Python 3.9+**, a **virtual environment**, and the **ray[data] package**.
 
-## Step 1: Check Your Python Version
+## Step 1: Check your Python version
 
-Ray 2.55 requires **Python 3.9 or higher**. Python 3.10 and 3.11 are recommended for the best compatibility. Check your version now:
+Ray 2.55 requires **Python 3.9 or higher**. Python 3.10 and 3.11 are recommended for the best compatibility. Check your version:
 
 <CodeBlock code={`python3 --version
 # Python 3.11.9  ← You need 3.9+`} language="bash" filename="terminal" />
 
 If your version is below 3.9, install a newer Python before continuing. On macOS, `brew install python@3.11` works well. On Ubuntu, use `sudo apt install python3.11`.
 
-## Step 2: Create a Virtual Environment
+## Step 2: Create a virtual environment
 
 Always isolate your Ray installation in a virtual environment. This prevents conflicts with other projects on your system.
 
@@ -51,9 +51,9 @@ conda create -n ray-env python=3.11 -y
 # Activate it
 conda activate ray-env`} language="bash" filename="terminal" />
 
-Either approach works. The key is that your environment is active before you install Ray.
+Either approach works. Just make sure your environment is active before you install Ray.
 
-## Step 3: Install Ray with Data Support
+## Step 3: Install Ray with data support
 
 Ray is distributed as a single PyPI package with optional extras. The `[data]` extra pulls in everything you need for data processing:
 
@@ -63,7 +63,7 @@ pip install "ray[data]==2.55.1"
 
 Pin the version with `==2.55.1` so your environment is reproducible. Without pinning, a future `pip install --upgrade` could pull a breaking change.
 
-## The Ray Ecosystem of Packages
+## The Ray ecosystem of packages
 
 Ray is a family of libraries that share the same core. The `[data]` extra is one of several:
 
@@ -92,9 +92,9 @@ Ray is a family of libraries that share the same core. The `[data]` extra is one
 
 You can install multiple extras at once: `pip install "ray[data,train]==2.55.1"`. For this course, `ray[data]` is all you need.
 
-## Step 4: Verify Your Installation
+## Step 4: Verify your installation
 
-Run two quick checks to confirm everything is working:
+Run two quick checks to confirm everything works:
 
 <CodeBlock code={`# Check 1: CLI version
 ray --version
@@ -103,28 +103,28 @@ ray --version
 python3 -c "import ray; print(ray.__version__)"
 # 2.55.1`} language="bash" filename="terminal" />
 
-If both commands print `2.55.1`, you are ready to go. If you see an `ImportError`, make sure your virtual environment is activated.
+If both commands print `2.55.1`, you're ready. If you see an `ImportError`, make sure your virtual environment is activated.
 
-## Platform-Specific Notes
+## Platform-specific notes
 
-**macOS (Apple Silicon M1/M2/M3):** Ray has native ARM wheels since version 2.4. Install normally with pip — no Rosetta or special flags needed. If you hit issues, make sure you are using a native ARM Python (not an x86 version under Rosetta).
+**macOS (Apple Silicon M1/M2/M3):** Ray has native ARM wheels since version 2.4. Install normally with pip, no Rosetta or special flags needed. If you hit issues, make sure you're using a native ARM Python (not an x86 version under Rosetta).
 
 **Linux:** Ray works out of the box on x86_64. For ARM64 Linux (e.g., Graviton instances), native wheels are available starting with Ray 2.7.
 
-**Windows:** Ray does not run natively on Windows. Use **WSL2** (Windows Subsystem for Linux) instead. Install Ubuntu in WSL2, then follow the Linux instructions above. This gives you full compatibility with zero friction.
+**Windows:** Ray does not run natively on Windows. Use **WSL2** (Windows Subsystem for Linux) instead. Install Ubuntu in WSL2, then follow the Linux instructions above.
 
 <CodeBlock code={`# Windows users: install WSL2 first
 wsl --install -d Ubuntu-22.04
 # Then open the Ubuntu terminal and proceed with Linux instructions`} language="bash" filename="terminal" />
 
-## What Got Installed?
+## What got installed?
 
 When you ran `pip install "ray[data]"`, pip installed these key packages:
 
-- **ray** — the core distributed runtime (tasks, actors, object store)
-- **pyarrow** — columnar data format, the backbone of Ray Data
-- **pandas** — DataFrame library used for batch processing
-- **numpy** — numerical arrays
-- **fsspec** — filesystem abstraction for reading from S3, GCS, local disk
+- **ray**: the core distributed runtime (tasks, actors, object store)
+- **pyarrow**: columnar data format, the backbone of Ray Data
+- **pandas**: DataFrame library used for batch processing
+- **numpy**: numerical arrays
+- **fsspec**: filesystem abstraction for reading from S3, GCS, local disk
 
-You now have a complete environment for distributed data processing. In the next lesson, you will use it to run your first Ray program.
+You now have a complete environment for distributed data processing. Next up, you'll use it to run your first Ray program.

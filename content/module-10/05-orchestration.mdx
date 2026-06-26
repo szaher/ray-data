@@ -19,9 +19,9 @@ quiz:
     explanation: "Orchestrators like Airflow, Prefect, and Dagster automatically retry failed tasks. If a pipeline is idempotent -- meaning running it twice with the same input produces the same output -- retries are safe. Without idempotency, retries can cause duplicate data, corrupted state, or incorrect results."
 ---
 
-## Why Orchestrate Ray Data Pipelines?
+## Why orchestrate Ray Data pipelines?
 
-Ray Data pipelines run great interactively, but production workloads need **scheduling**, **dependency management**, **retries**, **alerting**, and **observability**. That is where orchestrators come in. They answer questions like: "Run this pipeline every night at 2 AM, but only after the upstream data lands."
+Ray Data pipelines run fine interactively, but production workloads need **scheduling**, **dependency management**, **retries**, **alerting**, and **observability**. Orchestrators handle the questions like "Run this pipeline every night at 2 AM, but only after the upstream data lands."
 
 <MermaidDiagram chart={`graph TB
     subgraph "Orchestrator"
@@ -52,7 +52,7 @@ Ray Data pipelines run great interactively, but production workloads need **sche
     style S3 fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
 `} />
 
-The orchestrator **does not run the data processing** -- it submits the job to a Ray cluster and monitors its progress. This separation keeps your orchestrator lightweight and your data processing scalable.
+The orchestrator **does not run the data processing**. It submits the job to a Ray cluster and monitors its progress. This separation keeps your orchestrator lightweight and your data processing scalable.
 
 ## Apache Airflow
 
@@ -285,7 +285,7 @@ def daily_metrics(context: AssetExecutionContext):
     context.log.info(f"Metrics written to {output_path}")
     ray.shutdown()`} language="python" filename="dagster_assets.py" />
 
-### Dagster with @op (Operational Pattern)
+### Dagster with @op (operational pattern)
 
 For pipelines that do not map cleanly to assets, Dagster's `@op` and `@job` decorators offer imperative control:
 
@@ -319,9 +319,9 @@ def etl_pipeline():
     output_path = extract_and_transform()
     validate_output(output_path)`} language="python" filename="dagster_ops.py" />
 
-## Best Practices
+## Best practices
 
-### Cluster Lifecycle Management
+### Cluster lifecycle management
 
 <MermaidDiagram chart={`graph LR
     subgraph "Option A: Long-lived Cluster"
@@ -345,13 +345,13 @@ def etl_pipeline():
     style B4 fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-**Long-lived clusters** are ideal when you have frequent jobs and want to avoid startup latency. Use KubeRay with autoscaling to manage cost.
+**Long-lived clusters** work best when you have frequent jobs and want to avoid startup latency. Use KubeRay with autoscaling to manage cost.
 
 **Per-job clusters** are better for infrequent, heavy workloads. The orchestrator spins up a cluster, runs the pipeline, and tears it down. No idle cost.
 
 ### Idempotency
 
-Always design pipelines to be **idempotent** -- running the same pipeline twice with the same inputs should produce the same outputs. This is critical because orchestrators retry failed tasks.
+Always design pipelines to be **idempotent**: running the same pipeline twice with the same inputs should produce the same outputs. This matters because orchestrators retry failed tasks.
 
 <CodeBlock language="python" code={`import ray
 def idempotent_pipeline(ds_date: str):
@@ -370,8 +370,8 @@ def idempotent_pipeline(ds_date: str):
     ds.write_parquet(output_path)
     return ds.count()`} language="python" filename="idempotent_pipeline.py" />
 
-**Key rules for idempotency:**
+Rules for idempotency:
 - Use **overwrite** mode, not append, when writing output.
 - Derive output paths from input parameters (dates, partition keys), not from runtime timestamps.
 - Avoid side effects that accumulate (e.g., incrementing counters, sending duplicate notifications).
-- Use deterministic transformations -- avoid `random()` or `datetime.now()` inside map functions.
+- Use deterministic transformations. Avoid `random()` or `datetime.now()` inside map functions.

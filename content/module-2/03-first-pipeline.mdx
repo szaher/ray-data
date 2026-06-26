@@ -19,11 +19,11 @@ quiz:
     explanation: "ray.data.read_csv() returns a Ray Dataset object. It does not load the file into memory immediately — it records where the data is so it can be read in distributed blocks when a consuming operation triggers execution."
 ---
 
-## From Zero to Pipeline in 10 Lines
+## From zero to pipeline in 10 lines
 
-You know how to run functions on Ray workers. Now let's process **data**. Ray Data gives you a pipeline API that reads, transforms, filters, and writes data — all distributed automatically.
+You know how to run functions on Ray workers. Now, process **data**. Ray Data gives you a pipeline API that reads, transforms, filters, and writes data, all distributed automatically.
 
-Here is a complete pipeline in 10 lines:
+Here is a complete pipeline:
 
 <CodeBlock code={`import ray
 ray.init()
@@ -36,9 +36,9 @@ ds.show(5)
 ds.write_parquet("/tmp/iris_filtered")
 print("Done! Parquet files written to /tmp/iris_filtered/")`} language="python" filename="first_pipeline.py" />
 
-That's a real, distributed data pipeline. Let's walk through each step.
+That's a real, distributed data pipeline. Here's what each step does.
 
-## Step 1: Read Data
+## Step 1: Read data
 
 Ray Data can read from CSV, Parquet, JSON, and many other formats. It can also create datasets from Python objects:
 
@@ -55,7 +55,7 @@ ds = ray.data.from_items([
 # From S3 (no credentials needed for public buckets)
 ds = ray.data.read_csv("s3://anonymous@ray-example-data/iris.csv")`} language="python" filename="read_data.py" />
 
-`read_csv()` returns a **Ray Dataset** — not a pandas DataFrame. The data is split into **blocks** that can be processed in parallel across workers.
+`read_csv()` returns a **Ray Dataset**, not a pandas DataFrame. The data is split into **blocks** that can be processed in parallel across workers.
 
 ## Step 2: Transform with .map()
 
@@ -106,9 +106,9 @@ print(ds.schema())
 # score   int64
 # passed  bool`} language="python" filename="inspect_data.py" />
 
-## Step 5: Write Results
+## Step 5: Write results
 
-Save your processed data to disk. Parquet is the recommended format — it's columnar, compressed, and fast:
+Save your processed data to disk. Parquet is the recommended format because it's columnar, compressed, and fast:
 
 <CodeBlock code={`# Write to Parquet (recommended)
 ds.write_parquet("/tmp/output/")
@@ -117,11 +117,11 @@ ds.write_csv("/tmp/output_csv/")
 # Write to JSON
 ds.write_json("/tmp/output_json/")`} language="python" filename="write_data.py" />
 
-Ray Data writes one file per block, so the output directory will contain multiple files. This is normal for distributed systems — each worker writes its own partition.
+Ray Data writes one file per block, so the output directory will contain multiple files. This is normal for distributed systems. Each worker writes its own partition.
 
-## How the Pipeline Flows
+## How the pipeline flows
 
-Here is what happens when you execute the pipeline:
+Here is what happens when the pipeline executes:
 
 <MermaidDiagram chart={`graph LR
     R["read_csv()"] --> M[".map()\nadd sepal_area"]
@@ -144,14 +144,14 @@ Here is what happens when you execute the pipeline:
 
 Data flows left to right, one block at a time. While block 1 is being filtered, block 2 can still be in the map stage. This **pipelining** keeps all your CPU cores busy.
 
-## Key Concept: Lazy Execution
+## Key concept: lazy execution
 
 Ray Data pipelines are **lazy**. When you call `.map()` or `.filter()`, nothing happens yet. Ray builds a plan but doesn't process any data. Execution starts only when you call a **consuming operation**:
 
-- `.show()` — prints rows (triggers execution)
-- `.count()` — counts rows (triggers execution)
-- `.take(n)` — returns n rows as a list (triggers execution)
-- `.write_parquet()` — writes to disk (triggers execution)
+- `.show()` prints rows (triggers execution)
+- `.count()` counts rows (triggers execution)
+- `.take(n)` returns n rows as a list (triggers execution)
+- `.write_parquet()` writes to disk (triggers execution)
 
 <CodeBlock code={`import ray
 ray.init()
@@ -162,7 +162,7 @@ ds = ds.filter(lambda row: row["y"] > 500)
 # THIS triggers execution of the entire pipeline
 ds.show(5)`} language="python" filename="lazy_execution.py" />
 
-If you want to force execution without consuming the result (for example, to cache the data in memory), use `.materialize()`:
+To force execution without consuming the result (for example, to cache data in memory), use `.materialize()`:
 
 <CodeBlock code={`# Force execution and keep the result in Ray's object store
 ds = ds.materialize()
@@ -170,7 +170,7 @@ ds = ds.materialize()
 print(ds.count())
 ds.show(5)`} language="python" filename="materialize.py" />
 
-## Putting It All Together
+## Putting it all together
 
 Here is the full pipeline from the top of this lesson, with comments explaining each step:
 
@@ -196,4 +196,4 @@ ds.write_parquet("/tmp/iris_filtered")
 # 8. Clean up
 ray.shutdown()`} language="python" filename="full_pipeline.py" />
 
-You have just built a distributed data pipeline. The same code works on your laptop with 8 cores and on a 100-node cluster with 6,400 cores — no changes needed. That is the power of Ray Data.
+You've just built a distributed data pipeline. The same code works on your laptop with 8 cores and on a 100-node cluster with 6,400 cores, no changes needed.

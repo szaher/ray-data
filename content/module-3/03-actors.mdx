@@ -19,9 +19,9 @@ quiz:
     explanation: "A single actor processes method calls sequentially in FIFO order. This guarantees thread-safe access to the actor's internal state without requiring locks."
 ---
 
-## Why Actors?
+## Why actors?
 
-Tasks are stateless — each call is independent. But many workloads need **state**: a model loaded in memory, a database connection, a running counter. Actors solve this.
+Tasks are stateless: each call is independent. But many workloads need **state**, whether that's a model loaded in memory, a database connection, or a running counter.
 
 A Ray **actor** is a `@ray.remote` class. Ray creates a dedicated worker process for it, and that process stays alive, holding state between method calls.
 
@@ -52,7 +52,7 @@ counter.increment.remote()
 print(ray.get(counter.get_value.remote()))  # 3
 `} />
 
-## Actor Lifecycle
+## Actor lifecycle
 
 When you call `MyClass.remote()`, Ray starts a new worker process, runs `__init__`, and returns an **actor handle**. The process lives until the handle goes out of scope, you call `ray.kill()`, or the actor crashes.
 
@@ -68,9 +68,9 @@ When you call `MyClass.remote()`, Ray starts a new worker process, runs `__init_
     style A fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Sequential Execution Guarantee
+## Sequential execution guarantee
 
-Method calls on a **single actor** are processed one at a time, in order. This means you never need locks — the actor model gives you thread safety for free.
+Method calls on a **single actor** are processed one at a time, in order. You never need locks. The actor model gives you thread safety by design.
 
 <CodeBlock language="python" code={`@ray.remote
 class BankAccount:
@@ -94,9 +94,9 @@ account.withdraw.remote(30)
 print(ray.get(account.withdraw.remote(10)))  # 110
 `} />
 
-## Scaling with Actor Pools
+## Scaling with actor pools
 
-Need parallelism **and** state? Use multiple actors. The `ActorPool` utility distributes work across a pool of actor instances:
+When you need both parallelism and state, use multiple actors. The `ActorPool` utility distributes work across a pool of actor instances:
 
 <CodeBlock language="python" code={`from ray.util import ActorPool
 
@@ -116,7 +116,7 @@ texts = ["hello world", "ray is great", "actors are useful", ...]
 results = list(pool.map(lambda actor, t: actor.process.remote(t), texts))
 `} />
 
-## Actor Resources and Options
+## Actor resources and options
 
 Like tasks, actors can declare resource requirements. You can also configure concurrency and lifetime:
 

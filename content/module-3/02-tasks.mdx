@@ -19,7 +19,7 @@ quiz:
     explanation: "The @ray.remote decorator converts a regular Python function into a Ray task. When called with .remote(), it runs asynchronously in a worker process and returns an ObjectRef instead of a value."
 ---
 
-## From Functions to Tasks
+## From functions to tasks
 
 A Ray **task** is a function that runs in a separate worker process. You create one by adding the `@ray.remote` decorator, then calling it with `.remote()` instead of `()`.
 
@@ -41,9 +41,9 @@ ref = square_remote.remote(4)   # Returns immediately
 result = ray.get(ref)           # Blocks until done → 16
 `} />
 
-## The Execution Model
+## The execution model
 
-When you call `.remote()`, three things happen: the function and its arguments are serialized, the task is scheduled onto an available worker, and an `ObjectRef` is returned immediately. Your driver script keeps running — it does not wait.
+When you call `.remote()`, three things happen: the function and its arguments are serialized, the task is scheduled onto an available worker, and an `ObjectRef` is returned immediately. Your driver script keeps running. It does not wait.
 
 <MermaidDiagram chart={`graph LR
     D[Driver Process] -->|".remote(4)"| S[Scheduler]
@@ -60,9 +60,9 @@ When you call `.remote()`, three things happen: the function and its arguments a
     style OS fill:#242734,stroke:#fc8181,color:#e0e0e0
 `} />
 
-## Parallel Execution
+## Parallel execution
 
-The real power of tasks is launching many at once. Submit all your work, then collect results:
+Tasks become useful when you launch many at once. Submit all your work, then collect results:
 
 <CodeBlock language="python" code={`import ray
 import time
@@ -83,9 +83,9 @@ refs = [slow_square.remote(i) for i in range(10)]
 results = ray.get(refs)  # Block once, get all results
 `} />
 
-## Passing Arguments and Dependencies
+## Passing arguments and dependencies
 
-Tasks can accept any serializable Python object. You can also pass `ObjectRef`s directly — Ray automatically resolves them before the task runs, creating **task dependencies** without ever fetching data to the driver.
+Tasks accept any serializable Python object. You can also pass `ObjectRef`s directly. Ray automatically resolves them before the task runs, creating **task dependencies** without ever fetching data to the driver.
 
 <CodeBlock language="python" code={`@ray.remote
 def load_data(path):
@@ -102,7 +102,7 @@ result_ref = process.remote(data_ref)  # Pass the ref directly
 stats = ray.get(result_ref)
 `} />
 
-## Resource Requirements
+## Resource requirements
 
 You can specify how many CPUs, GPUs, or custom resources a task needs:
 

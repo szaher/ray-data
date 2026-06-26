@@ -19,9 +19,9 @@ quiz:
     explanation: "In a streaming pipeline, the slowest stage limits overall throughput. If CPU preprocessing cannot feed batches fast enough, GPUs sit idle."
 ---
 
-## Measuring What Matters
+## Measuring what matters
 
-Optimizing without measurement is guesswork. Ray Data provides built-in profiling tools.
+Optimizing without measurement is guesswork. Ray Data has built-in profiling tools that show you where time goes.
 
 <MermaidDiagram chart={`graph LR
     A[Baseline\nMeasure] --> B[Identify\nBottleneck]
@@ -52,7 +52,7 @@ print(result.stats())
 # MapBatches: 200 blocks, 8.1s, 680 MB/s
 `} />
 
-## Benchmark Framework
+## Benchmark framework
 
 <CodeBlock language="python" code={`def benchmark(name, pipeline_fn, runs=3):
     times = []
@@ -69,7 +69,7 @@ for bs in [1024, 4096, 8192]:
                   .map_batches(lambda b: b, batch_size=bs))
 `} />
 
-## Tuning Parameters
+## Tuning parameters
 
 <MermaidDiagram chart={`graph TD
     A["batch_size\n1K-64K"] --> T[Throughput]
@@ -85,15 +85,15 @@ for bs in [1024, 4096, 8192]:
     style M fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## When to Use Ray Data vs Alternatives
+## When to use Ray Data vs alternatives
 
-**Ray Data wins** at GPU-heavy ML pipelines and mixed CPU/GPU workloads (streaming by default, native GPU actors, Arrow zero-copy). **Spark wins** at SQL-heavy analytics and large shuffle joins.
+Ray Data works best for GPU-heavy ML pipelines and mixed CPU/GPU workloads, where streaming execution, native GPU actors, and Arrow zero-copy give it an edge. Spark works best for SQL-heavy analytics and large shuffle joins.
 
-## Common Bottleneck Fixes
+## Common bottleneck fixes
 
-1. **Slow reads** — increase `parallelism` to create more blocks
-2. **CPU starvation** — increase `concurrency` or optimize the transform
-3. **GPU idle** — upstream CPU too slow; add CPU workers
-4. **OOM** — reduce `batch_size` or lower `target_max_block_size`
+1. **Slow reads**: increase `parallelism` to create more blocks
+2. **CPU starvation**: increase `concurrency` or optimize the transform
+3. **GPU idle**: upstream CPU is too slow; add CPU workers
+4. **OOM**: reduce `batch_size` or lower `target_max_block_size`
 
 Always start with `ds.stats()`, find the slowest operator, and tune that stage first.

@@ -19,11 +19,11 @@ quiz:
     explanation: "Ray provides ray.util.metrics.Counter (along with Gauge and Histogram) for custom metrics. You create the counter with a name and description, optionally add tag keys, and then call .inc() to increment it. Ray automatically exports these to the Prometheus endpoint."
 ---
 
-## Ray's Built-in Metrics Endpoint
+## Ray's built-in metrics endpoint
 
-Ray exposes a Prometheus-compatible metrics endpoint on every node. By default, this endpoint lives at port **8080** on each node and serves metrics in the standard Prometheus text format.
+Ray exposes a Prometheus-compatible metrics endpoint on every node. By default, this endpoint lives at port **8080** and serves metrics in the standard Prometheus text format.
 
-These metrics are collected automatically — you do not need to instrument your code to get cluster-level and Ray Data-level metrics. They cover CPU, memory, GPU, object store, task counts, and Ray Data operator statistics.
+These metrics are collected automatically. You do not need to instrument your code to get cluster-level and Ray Data-level metrics. They cover CPU, memory, GPU, object store, task counts, and Ray Data operator statistics.
 
 <CodeBlock code={`# Fetch raw Prometheus metrics from the head node
 curl http://127.0.0.1:8080/metrics
@@ -34,7 +34,7 @@ curl http://127.0.0.1:8080/metrics
 # ray_node_cpu_utilization{} 78.5
 # ray_component_num_fds{component="raylet"} 42`} language="bash" filename="fetch_metrics.sh" />
 
-## Key Ray Data Metrics
+## Key Ray Data metrics
 
 These are the most important Prometheus metrics for monitoring data pipelines:
 
@@ -50,11 +50,11 @@ These are the most important Prometheus metrics for monitoring data pipelines:
 | `ray_node_mem_used` | Per-node system memory used in bytes |
 | `ray_node_gpus_utilization` | Per-node GPU utilization percentage |
 
-When `ray_data_spilled_bytes` starts climbing, your pipeline is running out of object store memory and spilling blocks to disk — a major performance concern. When `ray_data_iterator_total_blocked_time_s` is high relative to total time, your consumer is starving because upstream operators cannot produce data fast enough.
+When `ray_data_spilled_bytes` starts climbing, your pipeline is running out of object store memory and spilling blocks to disk. This is a major performance concern. When `ray_data_iterator_total_blocked_time_s` is high relative to total time, your consumer is starving because upstream operators cannot produce data fast enough.
 
-## Setting Up Prometheus and Grafana
+## Setting up Prometheus and Grafana
 
-For production monitoring, you want to scrape Ray's metrics into Prometheus and visualize them in Grafana. Ray provides an official Grafana dashboard JSON that you can import directly.
+For production monitoring, scrape Ray's metrics into Prometheus and visualize them in Grafana. Ray provides an official Grafana dashboard JSON that you can import directly.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Ray Cluster"
@@ -107,7 +107,7 @@ curl -LO https://raw.githubusercontent.com/ray-project/ray/master/grafana/grafan
 # 4. Select your Prometheus data source
 # 5. Click Import`} language="bash" filename="grafana_setup.sh" />
 
-## Structured Logging
+## Structured logging
 
 Ray provides a structured logging system that you can use inside tasks and actors. Logs are automatically collected and viewable in the Dashboard's Logs tab.
 
@@ -133,9 +133,9 @@ logging.getLogger("ray.data").setLevel(logging.DEBUG)
 # DEBUG: Block 3 produced 50000 rows in 1.2s
 # INFO: Operator Map(preprocess) completed: 24 blocks, 1200000 rows`} language="python" filename="structured_logging.py" />
 
-Logs from tasks and actors are written to files on the node where they execute. The Dashboard aggregates these logs so you can view them from a single location — no need to SSH into individual machines.
+Logs from tasks and actors are written to files on the node where they execute. The Dashboard aggregates these logs so you can view them from one location, without SSH-ing into individual machines.
 
-## Custom Metrics
+## Custom metrics
 
 When the built-in metrics are not enough, you can define your own using `ray.util.metrics`. Ray supports three metric types: **Counter**, **Gauge**, and **Histogram**.
 
@@ -182,9 +182,9 @@ class BatchProcessor:
 
 Custom metrics appear alongside built-in metrics at the `/metrics` endpoint and can be scraped by Prometheus, charted in Grafana, and used to trigger alerts.
 
-## Putting It All Together
+## Combining all three layers
 
-A production-grade observability setup for Ray Data pipelines combines all three layers:
+A production observability setup for Ray Data pipelines combines three layers:
 
 <MermaidDiagram chart={`graph TB
     subgraph "Application Layer"
@@ -221,8 +221,8 @@ A production-grade observability setup for Ray Data pipelines combines all three
     style GRAF fill:#68d391,stroke:#68d391,color:#1a1d27
     style ELASTIC fill:#68d391,stroke:#68d391,color:#1a1d27`} />
 
-**Layer 1: Application** — your pipeline code emits custom metrics for business-level KPIs (rows processed, error rates, latency) and structured logs for debugging.
+**Layer 1, Application.** Your pipeline code emits custom metrics for business-level KPIs (rows processed, error rates, latency) and structured logs for debugging.
 
-**Layer 2: Ray** — the framework automatically collects system metrics (CPU, memory, GPU, object store) and aggregates logs. The dashboard provides real-time visibility.
+**Layer 2, Ray.** The framework automatically collects system metrics (CPU, memory, GPU, object store) and aggregates logs. The dashboard provides real-time visibility.
 
-**Layer 3: Infrastructure** — Prometheus scrapes all metrics for long-term storage and alerting. Grafana provides dashboards. Log storage (Elasticsearch, Loki) enables searching across historical logs.
+**Layer 3, Infrastructure.** Prometheus scrapes all metrics for long-term storage and alerting. Grafana provides dashboards. Log storage (Elasticsearch, Loki) enables searching across historical logs.

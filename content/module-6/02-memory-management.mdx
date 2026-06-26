@@ -19,9 +19,9 @@ quiz:
     explanation: "ctx.target_max_block_size (on DataContext) controls the target upper bound for block sizes. Ray Data uses this to decide when to split blocks during reads and shuffles."
 ---
 
-## How Ray Data Uses Memory
+## How Ray Data uses memory
 
-Ray Data stores intermediate data as **blocks** in the Ray object store — a shared-memory plasma store on each node. The streaming executor processes data stage-by-stage, but producers can outrun consumers, causing memory to grow. Understanding this pipeline is key to tuning large-scale jobs.
+Ray Data stores intermediate data as blocks in the Ray object store, a shared-memory plasma store on each node. The streaming executor processes data stage by stage, but producers can outrun consumers, causing memory to grow. Understanding this pipeline is the key to tuning large-scale jobs.
 
 <MermaidDiagram chart={`graph LR
     R["Read\n(Producer)"] -->|blocks| OS["Object Store\n(Shared Memory)"]
@@ -38,9 +38,9 @@ Ray Data stores intermediate data as **blocks** in the Ray object store — a sh
     style W fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Object Spilling
+## Object spilling
 
-When the object store fills up, Ray **spills** objects to local disk (or configured external storage). Spilling keeps jobs alive but dramatically slows them down due to disk I/O. The goal is to avoid spilling through proper tuning.
+When the object store fills up, Ray spills objects to local disk (or configured external storage). Spilling keeps jobs alive but dramatically slows them down because of disk I/O. The goal is to avoid spilling through proper tuning.
 
 <CodeBlock language="python" code={`import ray
 
@@ -57,9 +57,9 @@ ds = ds.map_batches(heavy_transform, batch_size=4096)
 stats = ds.materialize().stats()
 print(stats)  # Shows spill bytes if it occurred`} />
 
-## Tuning Block Size and Memory Limits
+## Tuning block size and memory limits
 
-The two primary knobs for memory management are **block size** and **object store memory limits**.
+The two primary knobs for memory management are block size and object store memory limits.
 
 <CodeBlock language="python" code={`import ray
 
@@ -74,9 +74,9 @@ ctx.target_max_block_size = 64 * 1024 * 1024  # 64 MiB
 # This triggers backpressure before hitting the global object store limit.
 ctx.execution_options.resource_limits.object_store_memory = 4e9  # 4 GiB`} />
 
-## Memory-Aware Scheduling and Backpressure
+## Memory-aware scheduling and backpressure
 
-Ray Data's streaming executor applies **backpressure** automatically: when downstream operators are slow or memory is filling up, the executor pauses upstream producers. You can tune this behavior.
+Ray Data's streaming executor applies backpressure automatically. When downstream operators are slow or memory is filling up, the executor pauses upstream producers.
 
 <CodeBlock language="python" code={`ctx = ray.data.DataContext.get_current()
 
@@ -97,9 +97,9 @@ print(f"Read stage: {ds_read.stats()}")
 ds_mapped = ds_read.map_batches(transform).materialize()
 print(f"Map stage: {ds_mapped.stats()}")`} />
 
-## Practical Guidelines
+## Practical guidelines
 
-- **Start with defaults** — Ray Data's backpressure handles most workloads out of the box.
-- **If you see spilling** — reduce `target_max_block_size`, lower `concurrency`, or add more nodes.
-- **For GPU inference** — set `concurrency` to match GPU count so you don't over-allocate object store memory with queued batches.
-- **Monitor with `ds.stats()`** — it reports bytes spilled, peak object store usage, and per-operator memory.
+- Start with defaults. Ray Data's backpressure handles most workloads without tuning.
+- If you see spilling, reduce `target_max_block_size`, lower `concurrency`, or add more nodes.
+- For GPU inference, set `concurrency` to match your GPU count so you don't over-allocate object store memory with queued batches.
+- Monitor with `ds.stats()`. It reports bytes spilled, peak object store usage, and per-operator memory.

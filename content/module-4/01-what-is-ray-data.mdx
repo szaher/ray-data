@@ -19,11 +19,11 @@ quiz:
     explanation: "Unlike Spark, Ray Data runs on the same Ray cluster as your training and serving code — no separate cluster manager, no data serialization boundary between processing and ML."
 ---
 
-## The Last-Mile Data Framework
+## Last-mile data processing
 
-Ray Data is a distributed data processing library built on Ray. It is designed for one thing above all: **last-mile data preprocessing** for machine learning.
+Ray Data is a distributed data processing library built on Ray, designed for **last-mile data preprocessing** in machine learning.
 
-Think of it as the bridge between your raw data (files on S3, databases, etc.) and your ML training loop or inference pipeline.
+It sits between your raw data (files on S3, databases, etc.) and your ML training loop or inference pipeline.
 
 <MermaidDiagram chart={`graph LR
     S[Raw Data\nS3 / GCS / Disk] --> RD[Ray Data\nLoad + Transform]
@@ -35,7 +35,7 @@ Think of it as the bridge between your raw data (files on S3, databases, etc.) a
     style I fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## When to Use Ray Data
+## When to use Ray Data
 
 | Scenario | Ray Data | Spark | Dask |
 |----------|----------|-------|------|
@@ -45,16 +45,16 @@ Think of it as the bridge between your raw data (files on S3, databases, etc.) a
 | Ad-hoc SQL analytics | Not ideal | Best fit | Not ideal |
 | Streaming ML pipelines | Good fit | Good fit | Poor fit |
 
-## Key Features
+## Key features
 
 - **Lazy execution** -- transformations are deferred until you consume results, enabling optimization.
 - **Arrow-native** -- data is stored in Apache Arrow format for zero-copy reads and efficient memory use.
-- **Heterogeneous compute** -- attach GPUs to specific transform steps while keeping others on CPU.
-- **Streaming execution** -- processes data in a pipeline so you never need to fit the full dataset in memory.
+- **Heterogeneous compute** -- you can attach GPUs to specific transform steps while keeping others on CPU.
+- **Streaming execution** -- data flows through a pipeline so the full dataset never needs to fit in memory.
 
-## The Core Abstraction: Dataset
+## The core abstraction: Dataset
 
-Everything in Ray Data revolves around the `Dataset` object. A Dataset is a distributed collection of rows, split into **blocks** that are processed in parallel.
+The central object in Ray Data is `Dataset`. A Dataset is a distributed collection of rows, split into **blocks** that are processed in parallel.
 
 <CodeBlock language="python" code={`import ray
 

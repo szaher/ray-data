@@ -19,9 +19,9 @@ quiz:
     explanation: "map_batches() gives your function an entire batch of rows at once, allowing you to use vectorized NumPy/Pandas operations that are 10-100x faster than Python loops. Use map() only when you truly need row-by-row processing with different logic per row."
 ---
 
-## The Performance Debugging Process
+## The performance debugging process
 
-Slow pipelines are frustrating, but there is a systematic way to find and fix the bottleneck. Follow these four steps in order.
+There is a systematic way to find and fix pipeline bottlenecks. Follow these four steps in order.
 
 <MermaidDiagram chart={`flowchart LR
     S1["Step 1\nds.stats()"] --> S2["Step 2\nCheck\nParallelism"]
@@ -39,9 +39,9 @@ Slow pipelines are frustrating, but there is a systematic way to find and fix th
 
 ---
 
-## Step 1: Check ds.stats()
+## Step 1: check ds.stats()
 
-The `stats()` method is your most powerful profiling tool. It shows time spent in each operator, rows processed, and throughput.
+The `stats()` method is your best profiling tool. It shows time spent in each operator, rows processed, and throughput.
 
 <CodeBlock code={`import ray
 ds = ray.data.read_parquet("s3://bucket/data/")
@@ -72,11 +72,11 @@ print(result.stats())
 #   * Wall time: 5.6s total, 56ms avg
 #   * Throughput: 1,785,714 rows/s`} language="python" filename="check_stats.py" />
 
-In this example, `featurize` takes 45.2 seconds out of a total of 71.2 seconds. That is where you should focus.
+In this example, `featurize` takes 45.2 seconds out of a total 71.2 seconds. That is where to focus.
 
 ---
 
-## Step 2: Check Parallelism
+## Step 2: check parallelism
 
 If your pipeline is slow, you may not be using all available cores. Check how many tasks are running in parallel.
 
@@ -100,7 +100,7 @@ print(result.stats())
 
 ---
 
-## Step 3: Check Data Skew
+## Step 3: check data skew
 
 Data skew means some blocks are much larger than others. The pipeline runs at the speed of the slowest block.
 
@@ -154,7 +154,7 @@ ds = ds.repartition(100)`} language="python" filename="check_skew.py" />
 
 ---
 
-## Step 4: Check I/O Bottlenecks
+## Step 4: check I/O bottlenecks
 
 Sometimes the bottleneck is reading or writing data, not processing it.
 
@@ -189,9 +189,7 @@ print(f"Read: {read_time:.1f}s | Compute: {compute_time:.1f}s | Write: {write_ti
 
 Choosing the right method can give you a 10-100x speedup for operations that can be vectorized.
 
-**Use `map()`** when you need to process rows individually with different logic per row.
-
-**Use `map_batches()`** when your operation can use NumPy, Pandas, or PyTorch batch operations.
+Use `map()` when you need to process rows individually with different logic per row. Use `map_batches()` when your operation can use NumPy, Pandas, or PyTorch batch operations.
 
 <CodeBlock code={`import ray
 import numpy as np
@@ -232,7 +230,7 @@ ds_fast2 = ds.map_batches(normalize_pandas, batch_format="pandas", batch_size=40
 
 ---
 
-## Operator Fusion
+## Operator fusion
 
 Ray Data automatically fuses compatible operators into a single execution step, reducing overhead. Check whether fusion is happening with the execution plan.
 
@@ -260,11 +258,11 @@ ds = ds.map_batches(step3, batch_size=1024)  # same batch_size = fusable`} langu
 
 ---
 
-## Profiling Tools
+## Profiling tools
 
 When `ds.stats()` is not enough, use dedicated profiling tools.
 
-### py-spy: Zero-Overhead Profiling
+### py-spy: zero-overhead profiling
 
 <CodeBlock code={`# Install py-spy
 pip install py-spy
@@ -276,7 +274,7 @@ ps aux | grep ray::MapBatches
 # Then attach py-spy to it:
 py-spy top --pid 12345`} language="bash" filename="terminal" />
 
-### Built-in Timing
+### Built-in timing
 
 <CodeBlock code={`import ray
 import time
@@ -300,7 +298,7 @@ ds = ds.map_batches(timed_process, batch_size=512)`} language="python" filename=
 
 ---
 
-## Performance Optimization Summary
+## Performance optimization summary
 
 <MermaidDiagram chart={`flowchart TD
     SLOW["Pipeline is slow"] --> STATS["Run ds.stats()"]
@@ -326,9 +324,9 @@ ds = ds.map_batches(timed_process, batch_size=512)`} language="python" filename=
 
 The most common performance wins, in order of likelihood:
 
-1. **Switch from `map()` to `map_batches()` with vectorized ops** — 10-100x speedup
-2. **Increase parallelism** (repartition to more blocks) — scales with CPU count
-3. **Fix data skew** (repartition after reads) — fixes straggler tasks
-4. **Use Parquet instead of CSV/JSON** — 2-10x faster I/O
-5. **Tune batch size** — balance between overhead and memory usage
-6. **Ensure operator fusion** — avoid unnecessary intermediate materialization
+1. Switch from `map()` to `map_batches()` with vectorized ops: 10-100x speedup
+2. Increase parallelism (repartition to more blocks): scales with CPU count
+3. Fix data skew (repartition after reads): fixes straggler tasks
+4. Use Parquet instead of CSV/JSON: 2-10x faster I/O
+5. Tune batch size: balance between overhead and memory usage
+6. Ensure operator fusion: avoid unnecessary intermediate materialization

@@ -19,9 +19,9 @@ quiz:
     explanation: "concurrency sets the number of parallel actor workers, and num_gpus requests GPU resources per worker — together they control GPU-accelerated parallelism."
 ---
 
-## End-to-End Image Processing
+## End-to-end image processing
 
-Image pipelines are a natural fit for Ray Data: images are independent, processing is compute-heavy, and throughput matters.
+Images are independent of each other, processing them is compute-heavy, and throughput matters. That makes image pipelines a natural fit for Ray Data.
 
 <MermaidDiagram chart={`graph LR
     A[Read Images\nS3 / Local] --> B[Resize & Normalize\nCPU]
@@ -33,7 +33,7 @@ Image pipelines are a natural fit for Ray Data: images are independent, processi
     style D fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Step 1 — Read and Transform
+## Step 1: read and transform
 
 <CodeBlock language="python" code={`import ray
 import numpy as np
@@ -54,9 +54,9 @@ def preprocess(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
 ds = ds.map_batches(preprocess, batch_format="numpy")
 `} />
 
-## Step 2 — GPU Inference with an Actor Class
+## Step 2: GPU inference with an actor class
 
-Wrap model loading in a class so the model is loaded once per actor, not once per batch.
+Wrap model loading in a class so the model loads once per actor, not once per batch.
 
 <CodeBlock language="python" code={`import torch
 from torchvision.models import resnet50, ResNet50_Weights
@@ -76,7 +76,7 @@ ds = ds.map_batches(ImageClassifier, batch_size=64, concurrency=2, num_gpus=1)
 ds.write_parquet("s3://my-bucket/results/")
 `} />
 
-## Architecture Summary
+## Architecture summary
 
 <MermaidDiagram chart={`graph TD
     subgraph CPU["CPU Workers"]
@@ -95,4 +95,4 @@ ds.write_parquet("s3://my-bucket/results/")
     style W fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-Key points: **read_images** handles decoding; CPU transforms run on many workers automatically; the GPU stage uses a class-based callable so the model loads once; `concurrency=2` runs two GPU actors in parallel.
+`read_images` handles decoding. CPU transforms run on many workers automatically. The GPU stage uses a class-based callable so the model loads once, and `concurrency=2` runs two GPU actors in parallel.

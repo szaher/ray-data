@@ -19,11 +19,11 @@ quiz:
     explanation: "batch_format controls the Python type your function receives. Use 'pandas' to get a pandas DataFrame, 'pyarrow' to get an Arrow Table, or 'numpy' for a dict of numpy arrays."
 ---
 
-## Arrow Under the Hood
+## Arrow under the hood
 
 Ray Data stores all data internally as **Apache Arrow tables**. When you read a CSV, Parquet file, or create a Dataset from Python objects, the data is converted to Arrow format.
 
-This matters because Arrow is columnar, supports zero-copy reads between processes, and provides a strict type system.
+Arrow is columnar, supports zero-copy reads between processes, and provides a strict type system.
 
 <MermaidDiagram chart={`graph TD
     SRC["Source Data\nCSV / Parquet / Python"] -->|read| ARR["Arrow Blocks\nColumnar · Typed · Zero-copy"]
@@ -37,9 +37,9 @@ This matters because Arrow is columnar, supports zero-copy reads between process
     style NP fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Inspecting the Schema
+## Inspecting the schema
 
-Every Dataset has a schema that describes its columns and types. Use `.schema()` to inspect it.
+Every Dataset has a schema describing its columns and types. Use `.schema()` to inspect it.
 
 <CodeBlock language="python" code={`import ray
 
@@ -55,7 +55,7 @@ print(ds.schema())
 # age     int64
 # score   double`} />
 
-## Arrow Type Mapping
+## Arrow type mapping
 
 | Python Type | Arrow Type | Notes |
 |-------------|------------|-------|
@@ -67,7 +67,7 @@ print(ds.schema())
 | `list` | `list<T>` | Typed lists |
 | `np.ndarray` | `ArrowTensorType` | For ML tensors |
 
-## Batch Formats in Practice
+## Batch formats in practice
 
 When calling `map_batches`, the `batch_format` parameter controls what your function receives and should return.
 
@@ -97,13 +97,13 @@ def transform_numpy(batch: dict) -> dict:
 
 ds.map_batches(transform_numpy, batch_format="numpy")`} />
 
-## When Schema Matters
+## When schema matters
 
 Schema mismatches cause runtime errors. Common pitfalls:
 
-1. **Returning different columns** from `map_batches` than what came in -- this is fine, but be consistent across batches.
-2. **Mixing types** -- if one batch returns `int` and another returns `float` for the same column, Arrow will reject it.
-3. **Null handling** -- Arrow distinguishes between `None` and missing values. Use `pa.array([1, None, 3])` to include nulls explicitly.
+1. Returning different columns from `map_batches` than what came in. This is fine, but be consistent across batches.
+2. Mixing types. If one batch returns `int` and another returns `float` for the same column, Arrow will reject it.
+3. Null handling. Arrow distinguishes between `None` and missing values. Use `pa.array([1, None, 3])` to include nulls explicitly.
 
 <CodeBlock language="python" code={`# Check schema before and after a transform
 ds = ray.data.read_csv("data.csv")
@@ -115,8 +115,8 @@ print("After:", ds.schema())
 # count() triggers execution and returns total rows
 print("Rows:", ds.count())`} />
 
-## Choosing a Batch Format
+## Choosing a batch format
 
-- **pandas** -- Best default. Rich API, wide library support, great for string and datetime operations.
-- **pyarrow** -- Fastest for pure column transforms. Use when performance is critical and you are comfortable with the Arrow compute API.
+- **pandas** -- Good default. Wide library support, great for string and datetime operations.
+- **pyarrow** -- Fastest for pure column transforms. Use when performance matters and you are comfortable with the Arrow compute API.
 - **numpy** -- Natural fit for numeric ML features. Returns a `dict[str, np.ndarray]`.

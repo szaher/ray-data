@@ -19,7 +19,7 @@ quiz:
     explanation: "Ray's object store uses shared memory with Apache Arrow format. Workers on the same node can read objects without copying them — zero-copy access — which is dramatically faster than serialization."
 ---
 
-## Ray: Distributed Python That Feels Like Python
+## Distributed Python that feels like Python
 
 Ray's core insight is simple: **distributed computing shouldn't require you to think about distribution**. You write Python functions, and Ray runs them across a cluster.
 
@@ -43,7 +43,7 @@ results = ray.get(futures)`} />
 
 The only differences: `@ray.remote` decorator, `.remote()` to call, `ray.get()` to collect. Everything else is Python.
 
-## The Architecture
+## The architecture
 
 <MermaidDiagram chart={`graph TD
     subgraph "Your Machine (Driver)"
@@ -77,17 +77,17 @@ The only differences: `@ray.remote` decorator, `.remote()` to call, `ray.get()` 
     style H fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
 `} />
 
-## The Key Components
+## The key components
 
-**Driver** — Your Python program. It connects to the cluster, submits tasks, and collects results. Think of it as the conductor of an orchestra.
+The **Driver** is your Python program. It connects to the cluster, submits tasks, and collects results. Think of it as the conductor of an orchestra.
 
-**Head Node** — Runs the **Global Control Store (GCS)** and **scheduler**. The GCS tracks all objects, actors, and cluster state. The scheduler decides which worker runs which task.
+The **Head Node** runs the **Global Control Store (GCS)** and **scheduler**. The GCS tracks all objects, actors, and cluster state. The scheduler decides which worker runs which task.
 
-**Workers** — Python processes that execute your tasks. Each worker can use CPU and/or GPU. Workers run on any node in the cluster.
+**Workers** are Python processes that execute your tasks. Each worker can use CPU and/or GPU, and workers run on any node in the cluster.
 
-**Object Store** — Distributed shared memory on each node. Uses Apache Arrow format for zero-copy access. When a worker on Node 1 needs data from Node 2, the object store handles the transfer automatically.
+The **Object Store** is distributed shared memory on each node. It uses Apache Arrow format for zero-copy access. When a worker on Node 1 needs data from Node 2, the object store handles the transfer automatically.
 
-## Why This Matters
+## Why this matters
 
 When we get to Ray Data, you'll see that datasets are stored in the object store as Arrow-formatted blocks. Transformations are tasks scheduled by the Ray scheduler. The streaming execution engine decides how many blocks to process at once based on available memory.
 

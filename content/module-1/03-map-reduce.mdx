@@ -19,15 +19,15 @@ quiz:
     explanation: "Map-Reduce's power comes from the Map step being embarrassingly parallel — no data element depends on another during mapping, so you can split across any number of workers."
 ---
 
-## The Pattern Behind Everything
+## The pattern behind everything
 
 Almost every data processing operation follows a three-step pattern:
 
-1. **Split** — Divide data into chunks
-2. **Process** — Apply a function to each chunk (independently)
-3. **Combine** — Merge the results
+1. **Split** the data into chunks
+2. **Process** each chunk independently
+3. **Combine** the results
 
-This is **Map-Reduce**, and it's the foundation of distributed data processing.
+This is **Map-Reduce**, the foundation of distributed data processing.
 
 <MermaidDiagram chart={`graph TD
     D[Dataset\n1000 rows] --> S[Split into chunks]
@@ -48,13 +48,13 @@ This is **Map-Reduce**, and it's the foundation of distributed data processing.
     style F fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## A Concrete Example
+## A concrete example
 
-**Task:** Count the word frequency in 1 million documents.
+Say you need to count word frequency across 1 million documents.
 
-**Map step:** Each worker counts words in its chunk of documents. Worker 1 gets documents 1-250K, Worker 2 gets 250K-500K, etc.
+In the map step, each worker counts words in its chunk of documents. Worker 1 gets documents 1-250K, Worker 2 gets 250K-500K, and so on.
 
-**Reduce step:** Merge all the word counts by summing them up.
+In the reduce step, all the word counts are merged by summing them up.
 
 <CodeBlock language="python" code={`# Pseudocode — this is the pattern Ray Data uses internally
 # Split
@@ -66,7 +66,7 @@ partial_counts = [count_words(chunk) for chunk in chunks]
 # Reduce (combine results)
 total_counts = merge_counts(partial_counts)`} />
 
-## Why This Matters for Ray Data
+## Why this matters for Ray Data
 
 When you write `ds.map_batches(transform)` in Ray Data, you're doing exactly this:
 
@@ -74,4 +74,4 @@ When you write `ds.map_batches(transform)` in Ray Data, you're doing exactly thi
 - Each block is **mapped** through your transform function on a separate worker
 - Results are **combined** back into a new dataset
 
-You don't write the split/combine logic — Ray Data handles it. You just write the transform function.
+You don't write the split/combine logic. Ray Data handles it. You just write the transform function.

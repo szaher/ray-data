@@ -19,9 +19,9 @@ quiz:
     explanation: "PyArrow's filesystem abstraction gives Ray Data a single interface for S3, GCS, Azure, and local filesystems. You swap the URI scheme and credentials while keeping the rest of your pipeline code identical."
 ---
 
-## Reading Data from the Cloud
+## Reading data from the cloud
 
-Most production Ray Data pipelines read from cloud object stores. Ray Data uses **PyArrow's filesystem layer** under the hood, which means S3, GCS, and Azure Blob Storage all work through the same `read_*` APIs -- you just change the URI prefix.
+Most production Ray Data pipelines read from cloud object stores. Ray Data uses **PyArrow's filesystem layer** under the hood, so S3, GCS, and Azure Blob Storage all work through the same `read_*` APIs. You just change the URI prefix.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Cloud Storage"
@@ -49,7 +49,7 @@ Most production Ray Data pipelines read from cloud object stores. Ray Data uses 
     style W4 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-Each worker reads its assigned file partitions **directly** from the object store -- the driver only coordinates which files go where. This means read throughput scales linearly with the number of workers.
+Each worker reads its assigned file partitions **directly** from the object store. The driver only coordinates which files go where, so read throughput scales linearly with the number of workers.
 
 ## AWS S3
 
@@ -65,7 +65,7 @@ ds_json = ray.data.read_json("s3://YOUR_BUCKET/raw/clicks.jsonl")
 print(ds.schema())
 print(f"Rows: {ds.count()}")`} language="python" filename="read_s3.py" />
 
-### Credential Configuration
+### Credential configuration
 
 Ray Data inherits credentials from **PyArrow's S3 filesystem**, which follows the standard AWS credential resolution order:
 
@@ -109,7 +109,7 @@ ds = ray.data.read_parquet(
     filesystem=gcs,
 )`} language="python" filename="read_gcs.py" />
 
-On **GKE** (Google Kubernetes Engine), Workload Identity provides credentials automatically -- no service account key files needed.
+On **GKE** (Google Kubernetes Engine), Workload Identity provides credentials automatically, so no service account key files are needed.
 
 ## Azure Blob Storage
 
@@ -139,7 +139,7 @@ az_fs = adlfs.AzureBlobFileSystem(
 )
 ds = ray.data.read_parquet("YOUR_CONTAINER/data/", filesystem=az_fs)`} language="python" filename="read_azure.py" />
 
-## Writing Back to Cloud Storage
+## Writing back to cloud storage
 
 Writing follows the same URI pattern. Ray Data writes one file per block in parallel across all workers.
 
@@ -154,7 +154,7 @@ ds.write_csv("gs://YOUR_GCS_BUCKET/exports/events/")
 # Control the number of output files
 ds.repartition(10).write_parquet("s3://YOUR_BUCKET/output/compact/")`} language="python" filename="write_cloud.py" />
 
-## Filesystem Abstraction with PyArrow
+## Filesystem abstraction with PyArrow
 
 The `pyarrow.fs` module is the glue that makes all of this work. You can pass **any** PyArrow filesystem to Ray Data's read/write methods, which means you can swap backends without changing pipeline logic.
 
@@ -176,11 +176,11 @@ ds = ray.data.read_parquet("YOUR_BUCKET/data/", filesystem=fs)
 ds = ds.filter(lambda row: row["status"] == "active")
 ds.write_parquet("YOUR_BUCKET/output/", filesystem=fs)`} language="python" filename="filesystem_abstraction.py" />
 
-## Performance Tips
+## Performance tips
 
-Getting maximum throughput from cloud reads requires tuning a few knobs:
+Getting maximum throughput from cloud reads requires tuning a few knobs.
 
-**Partition discovery** -- Ray Data lists all files before reading. For directories with thousands of files, this listing step can be slow. Use explicit file lists when possible.
+**Partition discovery.** Ray Data lists all files before reading. For directories with thousands of files, this listing step can be slow. Use explicit file lists when possible.
 
 <CodeBlock language="python" code={`import ray
 # Slow: Ray must list the entire directory tree
@@ -201,7 +201,7 @@ ds = ray.data.read_parquet(
     ),
 )`} language="python" filename="performance_tips.py" />
 
-**Key tuning parameters:**
-- **`override_num_blocks`** -- controls how many parallel read tasks Ray launches. More blocks means more parallelism but higher scheduling overhead.
-- **`ray.data.DataContext.get_current().target_max_block_size`** -- controls the target size per block (default 512 MiB). Smaller blocks improve memory efficiency; larger blocks reduce overhead.
-- **File size alignment** -- aim for Parquet files in the 128 MiB to 1 GiB range. Thousands of tiny files create listing bottlenecks; single huge files prevent parallelism.
+Key tuning parameters:
+- **`override_num_blocks`** controls how many parallel read tasks Ray launches. More blocks means more parallelism but higher scheduling overhead.
+- **`ray.data.DataContext.get_current().target_max_block_size`** controls the target size per block (default 512 MiB). Smaller blocks improve memory efficiency; larger blocks reduce overhead.
+- **File size alignment.** Aim for Parquet files in the 128 MiB to 1 GiB range. Thousands of tiny files create listing bottlenecks. Single huge files prevent parallelism.

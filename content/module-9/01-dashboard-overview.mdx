@@ -21,11 +21,11 @@ quiz:
 
 ## What is the Ray Dashboard?
 
-The Ray Dashboard is a web-based UI that gives you real-time visibility into your Ray cluster. It runs at **http://127.0.0.1:8265** by default and provides a single pane of glass for monitoring jobs, inspecting actors, viewing logs, and tracking resource utilization.
+The Ray Dashboard is a web-based UI that shows you what your Ray cluster is doing in real time. It runs at **http://127.0.0.1:8265** by default and covers jobs, actors, logs, and resource utilization from one place.
 
-You do not need to install anything extra. The dashboard ships with Ray and starts automatically.
+No extra installation required. The dashboard ships with Ray and starts automatically.
 
-## Launching the Dashboard
+## Launching the dashboard
 
 The dashboard starts whenever a Ray cluster starts. There are two common paths:
 
@@ -48,9 +48,9 @@ ray start --address=<head-node-ip>:6379`} language="bash" filename="cluster_star
 
 Once the cluster is running, open your browser to the head node's IP on port 8265.
 
-## How the Dashboard Works
+## How the dashboard works
 
-The dashboard is a lightweight web server running on the head node. It does not run your workloads — it observes them. The dashboard queries the **Global Control Store (GCS)**, which is the single source of truth for all cluster metadata.
+The dashboard is a lightweight web server on the head node. It does not run your workloads. It observes them by querying the **Global Control Store (GCS)**, which holds all cluster metadata.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Head Node"
@@ -75,47 +75,47 @@ The dashboard is a lightweight web server running on the head node. It does not 
     style W1 fill:#242734,stroke:#b794f4,color:#e0e0e0
     style W2 fill:#242734,stroke:#b794f4,color:#e0e0e0`} />
 
-Every raylet on every worker node continuously reports its status to the GCS — CPU usage, memory, running tasks, actor states. The dashboard reads this data and renders it in real time.
+Every raylet on every worker node continuously reports its status to the GCS: CPU usage, memory, running tasks, actor states. The dashboard reads this data and renders it in real time.
 
-## Dashboard Tabs at a Glance
+## Dashboard tabs
 
-When you open the dashboard, you see a navigation bar across the top with six main tabs. Each tab serves a specific purpose.
+The navigation bar across the top has six main tabs.
 
-**Jobs** — The tab you will use most often. It shows every Ray job (submitted via `ray.init()`, `ray job submit`, or the Jobs API). Each job displays a progress bar, the number of tasks completed, and any error traces. Click into a job to see its individual tasks, their execution times, and their logs. For Ray Data pipelines, this tab shows the operator-level execution graph.
+**Jobs** shows every Ray job (submitted via `ray.init()`, `ray job submit`, or the Jobs API). Each job displays a progress bar, the number of tasks completed, and any error traces. Click into a job to see its individual tasks, their execution times, and their logs. For Ray Data pipelines, this tab also shows the operator-level execution graph.
 
-**Actors** — Lists every actor in the cluster. You can see actor class names, their current state (ALIVE, DEAD, RESTARTING), the node they are running on, how many restarts have occurred, and resource consumption. This is essential for debugging long-running services and stateful computations.
+**Actors** lists every actor in the cluster: class names, current state (ALIVE, DEAD, RESTARTING), the node each is running on, restart counts, and resource consumption. Useful for debugging long-running services and stateful computations.
 
-**Metrics** — Displays time-series charts for CPU, GPU, memory, disk, and network utilization across the cluster. Ray exports Prometheus-compatible metrics, and this tab renders a built-in Grafana-style view. You will see per-node breakdowns and can zoom into specific time windows.
+**Metrics** displays time-series charts for CPU, GPU, memory, disk, and network utilization across the cluster. Ray exports Prometheus-compatible metrics, and this tab renders a built-in Grafana-style view with per-node breakdowns. You can zoom into specific time windows.
 
-**Logs** — Provides access to stdout and stderr for every task, actor, and system process in the cluster. You can filter by node, job, or actor. No more SSH-ing into machines to tail log files.
+**Logs** gives you access to stdout and stderr for every task, actor, and system process in the cluster. You can filter by node, job, or actor. No more SSH-ing into machines to tail log files.
 
-**Cluster** — Shows the topology of your cluster: how many nodes are up, their IP addresses, CPU/GPU/memory/disk resources, and the number of workers on each node. If a node goes down, it appears as DEAD with a timestamp.
+**Cluster** shows cluster topology: how many nodes are up, their IP addresses, CPU/GPU/memory/disk resources, and the number of workers on each node. If a node goes down, it appears as DEAD with a timestamp.
 
-**Serve** — Dedicated to Ray Serve deployments. Shows deployment status, replica counts, request latency, and error rates. This tab only appears when Ray Serve is active.
+**Serve** is dedicated to Ray Serve deployments. It shows deployment status, replica counts, request latency, and error rates. This tab only appears when Ray Serve is active.
 
-## The Jobs Page in Detail
+## The Jobs page in detail
 
-The Jobs page is where you spend most of your time monitoring Ray Data pipelines. Here is what you see for each job:
+The Jobs page is where you spend most of your time monitoring Ray Data pipelines. For each job you see:
 
-- **Job ID** and **submission ID** — unique identifiers
-- **Status** — PENDING, RUNNING, SUCCEEDED, or FAILED
-- **Progress bar** — a visual breakdown of tasks by state (scheduled, running, finished, failed)
-- **Duration** — wall-clock time since the job started
-- **Error message** — if the job failed, the full Python traceback appears here
+- **Job ID** and **submission ID** as unique identifiers
+- **Status**: PENDING, RUNNING, SUCCEEDED, or FAILED
+- **Progress bar** showing a visual breakdown of tasks by state (scheduled, running, finished, failed)
+- **Duration** as wall-clock time since the job started
+- **Error message** with the full Python traceback if the job failed
 
-Clicking into a running job reveals the **Task Timeline**, a Gantt-chart view showing when each task started, how long it ran, and on which node. For Ray Data jobs, you also see the **operator graph** — the DAG of map, filter, and other operators with per-operator progress.
+Clicking into a running job reveals the **Task Timeline**, a Gantt-chart view showing when each task started, how long it ran, and on which node. For Ray Data jobs, you also see the **operator graph**: the DAG of map, filter, and other operators with per-operator progress.
 
-## The Cluster Page in Detail
+## The Cluster page in detail
 
 The Cluster page gives you hardware-level visibility:
 
-- **Node table** — each row is a physical or virtual machine in the cluster, showing its IP, hostname, CPU count, GPU count, total memory, disk, and current utilization percentages
-- **Status indicators** — green for ALIVE, red for DEAD, yellow for draining
-- **Resource bars** — colored bars showing how much CPU, memory, GPU, and object store memory is currently in use versus available
+- **Node table**: each row is a physical or virtual machine in the cluster, showing its IP, hostname, CPU count, GPU count, total memory, disk, and current utilization percentages
+- **Status indicators**: green for ALIVE, red for DEAD, yellow for draining
+- **Resource bars**: colored bars showing how much CPU, memory, GPU, and object store memory is in use versus available
 
-This page helps you answer questions like: "Are all my nodes actually being used?" and "Is one node overloaded while others are idle?"
+This page helps you answer questions like "Are all my nodes actually being used?" and "Is one node overloaded while others are idle?"
 
-## Accessing the Dashboard Programmatically
+## Accessing the dashboard programmatically
 
 The dashboard also exposes a REST API. You can query it from scripts or monitoring tools:
 
@@ -131,7 +131,7 @@ for job in resp.json():
 resp = requests.get("http://127.0.0.1:8265/nodes?view=summary")
 print(resp.json())`} language="python" filename="dashboard_api.py" />
 
-## Dashboard Configuration Options
+## Dashboard configuration options
 
 You can customize the dashboard behavior when starting Ray:
 

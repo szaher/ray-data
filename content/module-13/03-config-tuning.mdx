@@ -5,13 +5,13 @@ quiz: []
 
 ## Overview
 
-Ray Data has sensible defaults for most workloads, but when you need to optimize memory usage, throughput, or latency, these are the knobs to turn. Each setting includes its default, what it controls, and when to change it.
+Ray Data has sensible defaults for most workloads. When you need to optimize memory usage, throughput, or latency, these are the settings to adjust. Each one includes its default, what it controls, and when to change it.
 
 ---
 
-## Parallelism & Concurrency
+## Parallelism and concurrency
 
-### ray.init() Resource Declaration
+### ray.init() resource declaration
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -30,9 +30,9 @@ ray.init(
 )
 `} />
 
-**When to change:** Set `num_cpus` lower during development to leave cores free for other work. Increase `object_store_memory` when your pipeline shuffles large intermediate datasets.
+Set `num_cpus` lower during development to leave cores free for other work. Increase `object_store_memory` when your pipeline shuffles large intermediate datasets.
 
-### override_num_blocks in Readers
+### override_num_blocks in readers
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -46,7 +46,7 @@ ds = ray.data.read_parquet("data/", override_num_blocks=128)
 ds = ray.data.read_parquet("small_data/", override_num_blocks=4)
 `} />
 
-**When to change:** Increase when you have a few large files and want more parallelism. Decrease when you have many tiny files and scheduling overhead dominates.
+Increase when you have a few large files and want more parallelism. Decrease when you have many tiny files and scheduling overhead dominates.
 
 ### concurrency in map_batches
 
@@ -62,11 +62,11 @@ ds = ds.map_batches(transform_fn, concurrency=8)
 ds = ds.map_batches(transform_fn, concurrency=(2, 16))
 `} />
 
-**When to change:** Set a fixed number when your transform has specific resource requirements (e.g., each worker loads a model into memory). Use a range to let Ray auto-scale based on available resources.
+Set a fixed number when your transform has specific resource requirements (e.g., each worker loads a model into memory). Use a range to let Ray auto-scale based on available resources.
 
 ---
 
-## Memory Management
+## Memory management
 
 ### ctx.target_max_block_size
 
@@ -82,7 +82,7 @@ ctx.target_max_block_size = 64 * 1024 * 1024    # 64 MiB
 ctx.target_max_block_size = 1024 * 1024 * 1024   # 1 GiB
 `} />
 
-**When to change:** Decrease when you hit out-of-memory errors. Smaller blocks use less memory per task but increase scheduling overhead. Increase when you have plenty of RAM and want fewer, larger tasks for better throughput.
+Decrease when you hit out-of-memory errors. Smaller blocks use less memory per task but increase scheduling overhead. Increase when you have plenty of RAM and want fewer, larger tasks for better throughput.
 
 ### batch_size in map_batches
 
@@ -98,9 +98,9 @@ ds = ds.map_batches(fn, batch_size=8192)
 ds = ds.map_batches(ModelClass, batch_size=32, num_gpus=1)
 `} />
 
-**When to change:** Increase for vectorized operations (NumPy, Pandas) to amortize per-batch overhead. Decrease for memory-heavy transforms where each row is large (images, embeddings). For GPU inference, match the model's optimal throughput batch size.
+Increase for vectorized operations (NumPy, Pandas) to amortize per-batch overhead. Decrease for memory-heavy transforms where each row is large (images, embeddings). For GPU inference, match the model's optimal throughput batch size.
 
-### Object Store Memory Limits
+### Object store memory limits
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -112,11 +112,11 @@ ctx = DataContext.get_current()
 ctx.execution_options.resource_limits.object_store_memory = 4e9
 `} />
 
-**When to change:** Set this when running multiple pipelines concurrently or when you need to guarantee that a pipeline does not consume all available object store memory. The pipeline will apply backpressure (slow down producers) when the limit is reached.
+Set this when running multiple pipelines concurrently or when you need to guarantee that a pipeline does not consume all available object store memory. The pipeline will apply backpressure (slow down producers) when the limit is reached.
 
 ---
 
-## Execution Options
+## Execution options
 
 ### preserve_order
 
@@ -135,7 +135,7 @@ for batch in ds.iter_batches():
     process_in_order(batch)
 `} />
 
-**When to change:** Enable when you need deterministic output ordering (e.g., writing sorted results, generating line-aligned predictions). Keeping it `False` (default) allows Ray to return results as they finish, which is faster.
+Enable when you need deterministic output ordering (e.g., writing sorted results, generating line-aligned predictions). Keeping it `False` (default) allows Ray to return results as they finish, which is faster.
 
 ### locality_with_output
 
@@ -148,13 +148,13 @@ ctx = DataContext.get_current()
 ctx.execution_options.locality_with_output = True
 `} />
 
-**When to change:** Enable in multi-node clusters when downstream consumers (e.g., training actors) are pinned to specific nodes. Reduces data transfer across the network.
+Enable in multi-node clusters when downstream consumers (e.g., training actors) are pinned to specific nodes. This reduces data transfer across the network.
 
 ---
 
-## Performance Tuning
+## Performance tuning
 
-### batch_format Selection
+### batch_format selection
 
 | Format | Type Received | Best For |
 |--------|--------------|----------|
@@ -170,7 +170,7 @@ ds.map_batches(fn, batch_format="numpy")
 ds.map_batches(fn, batch_format="pyarrow")
 `} />
 
-**When to change:** Default is fine for most cases. Use `"numpy"` when doing pure numerical work to avoid DataFrame overhead. Use `"pyarrow"` when your transform is simple and you want to avoid conversion costs.
+The default is fine for most cases. Use `"numpy"` when doing pure numerical work to avoid DataFrame overhead. Use `"pyarrow"` when your transform is simple and you want to avoid conversion costs.
 
 ### zero_copy_batch
 
@@ -186,9 +186,9 @@ ds.map_batches(
 )
 `} />
 
-**When to change:** Enable when your transform only reads batch data without modifying it in place. Saves memory and time by avoiding a copy. Do not enable if your function mutates the batch -- it will corrupt shared memory.
+Enable when your transform only reads batch data without modifying it in place. This saves memory and time by avoiding a copy. Do not enable if your function mutates the batch, as it will corrupt shared memory.
 
-### ActorPoolStrategy for Stateful Transforms
+### ActorPoolStrategy for stateful transforms
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -213,9 +213,9 @@ ds = ds.map_batches(
 )
 `} />
 
-**When to change:** Use `ActorPoolStrategy` whenever your transform has expensive initialization (loading ML models, opening database connections, compiling JIT code). Without it, each task re-initializes from scratch.
+Use `ActorPoolStrategy` whenever your transform has expensive initialization (loading ML models, opening database connections, compiling JIT code). Without it, each task re-initializes from scratch.
 
-### Resource Requests per Task
+### Resource requests per task
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -238,11 +238,11 @@ ds = ds.map_batches(
 )
 `} />
 
-**When to change:** Set `num_cpus` higher than 1 when your function uses internal parallelism (e.g., OpenMP, multi-threaded libraries). Set `num_gpus` to match what your model actually needs.
+Set `num_cpus` higher than 1 when your function uses internal parallelism (e.g., OpenMP, multi-threaded libraries). Set `num_gpus` to match what your model actually needs.
 
 ---
 
-## Quick Tuning Decision Table
+## Quick tuning decision table
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
@@ -257,9 +257,9 @@ ds = ds.map_batches(
 
 ---
 
-## Full Configuration Example
+## Full configuration example
 
-A production pipeline with all major tuning knobs set explicitly:
+A production pipeline with all major tuning settings set explicitly:
 
 <CodeBlock language="python" filename="full_tuned_pipeline.py" code={`import ray
 from ray.data import DataContext, ActorPoolStrategy

@@ -19,9 +19,9 @@ quiz:
     explanation: "Zero-copy means that workers on the same node access the object directly from shared memory (Plasma) via memory mapping. The data is not duplicated into each worker's heap, saving both time and memory."
 ---
 
-## The ObjectRef: Ray's Fundamental Abstraction
+## The ObjectRef
 
-Every `.remote()` call returns an **ObjectRef** — a pointer to a value that may not exist yet. The actual data lives in Ray's distributed **object store**, not in your driver process.
+Every `.remote()` call returns an **ObjectRef**, a pointer to a value that may not exist yet. The actual data lives in Ray's distributed **object store**, not in your driver process.
 
 <CodeBlock language="python" code={`import ray
 import numpy as np
@@ -40,7 +40,7 @@ data = ray.get(ref)  # Fetch the actual numpy array
 print(data.shape)    # (1000000,)
 `} />
 
-## How the Object Store Works
+## How the object store works
 
 Each node runs an **object store** (built on Apache Arrow's Plasma). It uses shared memory so multiple worker processes on the same node can access the same data without copying it.
 
@@ -64,9 +64,9 @@ Each node runs an **object store** (built on Apache Arrow's Plasma). It uses sha
     style W5 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## ray.put(): Explicit Storage
+## ray.put(): explicit storage
 
-When you pass a large object to many tasks, the driver serializes it for **each** call. Use `ray.put()` to store it once and pass the ref instead:
+When you pass a large object to many tasks, the driver serializes it for **each** call. `ray.put()` stores it once so you can pass the ref instead:
 
 <CodeBlock language="python" code={`import numpy as np
 
@@ -80,11 +80,11 @@ big_ref = ray.put(big_array)
 refs = [process.remote(big_ref) for _ in range(100)]
 `} />
 
-This is one of the most impactful optimizations in Ray. For a 100 MB array sent to 100 tasks, you go from **10 GB** of serialization to **100 MB**.
+For a 100 MB array sent to 100 tasks, this takes you from **10 GB** of serialization down to **100 MB**.
 
-## Zero-Copy Reads
+## Zero-copy reads
 
-When a worker on the same node needs an object, it reads directly from shared memory via memory mapping. No data is copied into the worker's heap. This is called **zero-copy deserialization** and it works with NumPy arrays and Arrow tables out of the box.
+When a worker on the same node needs an object, it reads directly from shared memory via memory mapping. No data is copied into the worker's heap. This is **zero-copy deserialization**, and it works with NumPy arrays and Arrow tables out of the box.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Same Node"
@@ -100,7 +100,7 @@ When a worker on the same node needs an object, it reads directly from shared me
     style T3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## Object Lifetime and Spilling
+## Object lifetime and spilling
 
 Objects stay in memory as long as an `ObjectRef` references them. When the object store fills up, Ray **spills** objects to disk automatically and reloads them on demand.
 
@@ -116,6 +116,6 @@ print(ray.cluster_resources())
 # {'object_store_memory': 8589934592, ...}
 `} />
 
-## Best Practices
+## Best practices
 
-**Do** use `ray.put()` when passing the same large object to many tasks. **Do** pass `ObjectRef`s between tasks to build pipelines without pulling data to the driver. **Don't** call `ray.get()` too early — it blocks and defeats the purpose of async execution. Let Ray manage data locality as long as possible.
+Use `ray.put()` when passing the same large object to many tasks. Pass `ObjectRef`s between tasks to build pipelines without pulling data to the driver. Avoid calling `ray.get()` too early; it blocks and defeats the purpose of async execution. Let Ray manage data locality as long as possible.

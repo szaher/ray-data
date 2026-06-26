@@ -19,9 +19,9 @@ quiz:
     explanation: "Each Python process has its own memory space. Sharing data between processes requires serialization (pickling), which is slow and doubles memory usage for large datasets."
 ---
 
-## Python's Dirty Secret: The GIL
+## Python's dirty secret: the GIL
 
-Python has a **Global Interpreter Lock (GIL)** — a mutex that allows only one thread to execute Python bytecode at any given time. Even on a machine with 16 cores, a multi-threaded Python program uses just one core for Python code.
+Python has a **Global Interpreter Lock (GIL)**, a mutex that allows only one thread to execute Python bytecode at any given time. Even on a machine with 16 cores, a multi-threaded Python program uses just one core for Python code.
 
 <MermaidDiagram chart={`graph TD
     subgraph "What you expect"
@@ -41,11 +41,11 @@ Python has a **Global Interpreter Lock (GIL)** — a mutex that allows only one 
     style C1B fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
 `} />
 
-## The Multiprocessing Workaround
+## The multiprocessing workaround
 
-Python's `multiprocessing` module bypasses the GIL by creating separate processes, each with its own Python interpreter and memory space. But this has costs:
+Python's `multiprocessing` module bypasses the GIL by creating separate processes, each with its own Python interpreter and memory space. This has costs, though.
 
-**The serialization problem:** To send data between processes, Python must *serialize* (pickle) it — convert it to bytes, copy it, then deserialize on the other side. For a 1 GB DataFrame, this means:
+The serialization problem: to send data between processes, Python must *serialize* (pickle) it. That means converting it to bytes, copying it, then deserializing on the other side. For a 1 GB DataFrame:
 
 1. Serialize: ~2 seconds + 1 GB memory
 2. Copy: ~0.5 seconds
@@ -59,11 +59,11 @@ You've spent 4.5 seconds and doubled your memory usage just to *move* the data.
     style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## What Ray Does Differently
+## What Ray does differently
 
 Ray solves both problems:
 
-1. **No GIL limitation** — Ray tasks run in separate worker processes automatically
-2. **Shared memory** — Ray's object store uses shared memory (Apache Arrow format), so data doesn't need to be copied between workers
+1. **No GIL limitation.** Ray tasks run in separate worker processes automatically.
+2. **Shared memory.** Ray's object store uses shared memory (Apache Arrow format), so data doesn't need to be copied between workers.
 
-This is why Ray exists: **it gives you the parallelism of multiprocessing without the serialization overhead**.
+Ray gives you the parallelism of multiprocessing without the serialization overhead.

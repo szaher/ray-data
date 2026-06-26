@@ -3,11 +3,11 @@ title: "Ray Data API Cheat Sheet"
 quiz: []
 ---
 
-## Reading Data
+## Reading data
 
 Load data from files, databases, and in-memory structures into a `ray.data.Dataset`.
 
-### From Files
+### From files
 
 | API | Description |
 |-----|-------------|
@@ -25,7 +25,7 @@ ds = ray.data.read_text("logs/*.txt")
 ds = ray.data.read_binary_files("images/", include_paths=True)
 `} />
 
-### From Databases & Table Formats
+### From databases and table formats
 
 | API | Description |
 |-----|-------------|
@@ -43,7 +43,7 @@ ds = ray.data.read_sql(
 ds = ray.data.read_delta("s3://lakehouse/events/")
 `} />
 
-### From In-Memory Data
+### From in-memory data
 
 | API | Description |
 |-----|-------------|
@@ -67,11 +67,11 @@ ds = ray.data.range_tensor(100, shape=(64, 64, 3))
 
 ---
 
-## Transforming Data
+## Transforming data
 
-All transforms are **lazy** -- they execute only when you consume the data.
+All transforms are lazy. They execute only when you consume the data.
 
-### Row-Level Transforms
+### Row-level transforms
 
 | API | Description |
 |-----|-------------|
@@ -87,7 +87,7 @@ ds = ds.flat_map(lambda row: [{"word": w} for w in row["text"].split()])
 ds = ds.filter(lambda row: row["age"] >= 18)
 `} />
 
-### Batch Transforms
+### Batch transforms
 
 | API | Description |
 |-----|-------------|
@@ -107,7 +107,7 @@ def double(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
 ds = ds.map_batches(double, batch_format="numpy")
 `} />
 
-### Column Operations
+### Column operations
 
 | API | Description |
 |-----|-------------|
@@ -122,7 +122,7 @@ ds = ds.rename_columns({"old_name": "new_name"})
 ds = ds.select_columns(["id", "name", "score"])
 `} />
 
-### Ordering & Partitioning
+### Ordering and partitioning
 
 | API | Description |
 |-----|-------------|
@@ -157,7 +157,7 @@ def top_n(group: pd.DataFrame) -> pd.DataFrame:
 ds = ds.groupby("category").map_groups(top_n, batch_format="pandas")
 `} />
 
-### Combining Datasets
+### Combining datasets
 
 | API | Description |
 |-----|-------------|
@@ -174,9 +174,9 @@ train = ds1.union(ds2).union(ds3)
 
 ---
 
-## Consuming & Writing Data
+## Consuming and writing data
 
-### Inspecting Data
+### Inspecting data
 
 | API | Description |
 |-----|-------------|
@@ -216,7 +216,7 @@ for batch in ds.iter_torch_batches(batch_size=32, dtypes=torch.float32):
     logits = model(batch["features"])
 `} />
 
-### Converting to Other Formats
+### Converting to other formats
 
 | API | Description |
 |-----|-------------|
@@ -227,7 +227,7 @@ for batch in ds.iter_torch_batches(batch_size=32, dtypes=torch.float32):
 table = ds.to_arrow()      # PyArrow Table
 `} />
 
-### Writing to Storage
+### Writing to storage
 
 | API | Description |
 |-----|-------------|
@@ -244,9 +244,9 @@ ds.write_delta("s3://lakehouse/processed/")
 
 ---
 
-## Execution Control
+## Execution control
 
-### Materialization & Stats
+### Materialization and stats
 
 | API | Description |
 |-----|-------------|
@@ -260,7 +260,7 @@ ds.show(5)
 print(ds.stats())
 `} />
 
-### DataContext Configuration
+### DataContext configuration
 
 | API | Description |
 |-----|-------------|
@@ -277,7 +277,7 @@ ctx.execution_options.resource_limits.object_store_memory = 2e9
 ctx.execution_options.preserve_order = True
 `} />
 
-### Splitting Datasets
+### Splitting datasets
 
 | API | Description |
 |-----|-------------|

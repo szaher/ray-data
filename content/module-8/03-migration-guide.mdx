@@ -19,7 +19,7 @@ quiz:
     explanation: "SQL support, complex joins, window functions, and Catalyst optimization are deeply embedded in Spark's architecture and have no direct equivalent in Ray Data. Migration requires rewriting SQL logic as Python functions, replacing complex joins with lookup patterns, and manually optimizing operations that Catalyst would handle automatically."
 ---
 
-## When to Migrate — and When Not To
+## When to migrate, and when not to
 
 Before migrating from Spark to Ray Data, be honest about whether it makes sense. Migrate when:
 
@@ -35,9 +35,9 @@ Do **not** migrate when:
 - Your team's expertise is SQL, not Python
 - Spark's performance is already adequate for your use case
 
-## Concept Mapping
+## Concept mapping
 
-The first step in migration is understanding how Spark concepts map to Ray Data.
+Start by understanding how Spark concepts map to Ray Data.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Spark Concepts"
@@ -87,12 +87,12 @@ The first step in migration is understanding how Spark concepts map to Ray Data.
 | Executor | Worker | Ray workers are Python processes, not JVMs |
 | `broadcast()` | `ray.put()` | Shared-memory object store replaces broadcast protocol |
 | Spark UDF | `map` / `map_batches` | No UDF registration needed, just Python functions |
-| Catalyst | (none) | No general-purpose optimizer — you optimize manually |
+| Catalyst | (none) | No general-purpose optimizer; you optimize manually |
 | `cache()` / `persist()` | `materialize()` | Forces execution and stores results |
-| Spark SQL | (none) | No SQL interface — use functional API |
+| Spark SQL | (none) | No SQL interface; use functional API |
 | `repartition(n)` | `repartition(n)` | Same concept, different implementation |
 
-## Step-by-Step Migration Strategy
+## Step-by-step migration strategy
 
 <MermaidDiagram chart={`graph TD
     S1[1. Identify Pipeline Stages] --> S2[2. Classify Each Stage]
@@ -120,9 +120,9 @@ The first step in migration is understanding how Spark concepts map to Ray Data.
     style S11 fill:#fc8181,stroke:#fc8181,color:#1a1d27
 `} />
 
-## Pattern 1: Simple Read-Transform-Write
+## Pattern 1: simple read-transform-write
 
-This is the easiest migration pattern — the pipeline reads data, applies transformations, and writes output.
+This is the easiest migration pattern. The pipeline reads data, applies transformations, and writes output.
 
 <CodeBlock language="python" filename="spark_etl.py" code={`# Spark version
 from pyspark.sql import SparkSession
@@ -159,9 +159,9 @@ result = ds.map_batches(transform, batch_format="pandas")
 result.write_parquet("s3://bucket/processed/")
 `} />
 
-**Migration notes**: The Spark version uses column expressions; the Ray Data version uses Pandas operations inside `map_batches`. Both are vectorized. The Spark version benefits from predicate pushdown on the `status` filter. The Ray Data version reads all data then filters in Python.
+The Spark version uses column expressions; the Ray Data version uses Pandas operations inside `map_batches`. Both are vectorized. Spark benefits from predicate pushdown on the `status` filter. Ray Data reads all data then filters in Python.
 
-## Pattern 2: Broadcast Variable to ray.put()
+## Pattern 2: broadcast variable to ray.put()
 
 <CodeBlock language="python" filename="spark_broadcast.py" code={`# Spark: broadcast a lookup table
 from pyspark.sql.functions import col
@@ -186,11 +186,11 @@ def expand_countries(batch):
 result = ds.map_batches(expand_countries, batch_format="pandas")
 `} />
 
-**Migration notes**: `ray.put()` stores the lookup in the shared-memory object store. Workers on the same node access it via zero-copy memory mapping. Unlike Spark's broadcast, there is no explicit "destroy" call — Ray handles cleanup via reference counting.
+`ray.put()` stores the lookup in the shared-memory object store. Workers on the same node access it via zero-copy memory mapping. Unlike Spark's broadcast, there is no explicit "destroy" call. Ray handles cleanup via reference counting.
 
-## Pattern 3: Spark SQL to Functional API
+## Pattern 3: Spark SQL to functional API
 
-This pattern requires the most thought. You cannot just port SQL — you need to rethink the logic.
+This pattern requires the most thought. You cannot just port SQL. You need to rethink the logic.
 
 <CodeBlock language="python" filename="spark_sql.py" code={`# Spark: SQL with window functions
 df.createOrReplaceTempView("transactions")
@@ -240,9 +240,9 @@ def sql_transform(batch):
 result = ds.map_batches(sql_transform, batch_format="pandas")
 `} />
 
-**Migration notes**: Window functions are one of the hardest patterns to migrate. `map_groups` gives you per-group Pandas DataFrames where you can use any Pandas operation. For SQL-heavy logic, embedding DuckDB inside `map_batches` is a pragmatic bridge — you get SQL syntax with Ray's distributed execution.
+Window functions are one of the hardest patterns to migrate. `map_groups` gives you per-group Pandas DataFrames where you can use any Pandas operation. For SQL-heavy logic, embedding DuckDB inside `map_batches` is a pragmatic bridge: you get SQL syntax with Ray's distributed execution.
 
-## Pattern 4: Spark Caching to Ray Materialization
+## Pattern 4: Spark caching to Ray materialization
 
 <CodeBlock language="python" filename="spark_cache.py" code={`# Spark: cache intermediate results
 processed = df.filter(...).withColumn(...)
@@ -264,13 +264,13 @@ aggregated = materialized.groupby("city").aggregate(Count())
 # No explicit unpersist — reference counting handles cleanup
 `} />
 
-## Common Gotchas
+## Common gotchas
 
-### 1. Lazy vs Streaming Evaluation
+### 1. Lazy vs streaming evaluation
 
-Spark is lazy: nothing executes until an action (`count()`, `collect()`, `write`). Ray Data is also lazy for operator construction, but execution is streaming — blocks flow through the pipeline as soon as they are ready. This means Ray Data may start processing before all data is read, which is usually good, but it means errors can appear at different points in the pipeline than you expect.
+Spark is lazy: nothing executes until an action (`count()`, `collect()`, `write`). Ray Data is also lazy for operator construction, but execution is streaming. Blocks flow through the pipeline as soon as they are ready. Ray Data may start processing before all data is read, which is usually good, but errors can appear at different points in the pipeline than you expect.
 
-### 2. Partitioning Semantics
+### 2. Partitioning semantics
 
 <CodeBlock language="python" filename="partitioning_gotcha.py" code={`# Spark: partitions are tightly controlled
 df.repartition(100, "user_id")  # Hash-partition by user_id into 100 partitions
@@ -281,7 +281,7 @@ ds.repartition(100)  # Random redistribution into 100 blocks
 # For grouped operations, use groupby which handles this internally
 `} />
 
-### 3. Error Handling
+### 3. Error handling
 
 <CodeBlock language="python" filename="error_handling.py" code={`# Spark: errors surface at action time
 # Writing a UDF that might fail
@@ -303,11 +303,11 @@ def safe_transform(row):
 result = ds.map(safe_transform)
 `} />
 
-### 4. No Schema Enforcement
+### 4. No schema enforcement
 
-Spark DataFrames have strict schemas. If a column is declared as `IntegerType`, Spark enforces it. Ray Data blocks are Arrow tables with inferred schemas — if your `map_batches` function returns a batch with different columns or types, you may get silent schema drift across blocks. Always validate your output schema.
+Spark DataFrames have strict schemas. If a column is declared as `IntegerType`, Spark enforces it. Ray Data blocks are Arrow tables with inferred schemas. If your `map_batches` function returns a batch with different columns or types, you may get silent schema drift across blocks. Always validate your output schema.
 
-## Migration Decision Flowchart
+## Migration decision flowchart
 
 <MermaidDiagram chart={`graph TD
     START[Spark Pipeline to Migrate] --> Q1{Heavy SQL / Joins?}
@@ -335,10 +335,10 @@ Spark DataFrames have strict schemas. If a column is declared as `IntegerType`, 
     style Q5 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-## What Changes, What Stays
+## What changes, what stays
 
-**What stays the same**: Reading/writing Parquet and CSV. The concept of lazy evaluation. Map and filter operations. GroupBy aggregations. Repartitioning. The general pipeline pattern of read-transform-write.
+What stays the same: reading/writing Parquet and CSV, the concept of lazy evaluation, map and filter operations, GroupBy aggregations, repartitioning, the general pipeline pattern of read-transform-write.
 
-**What changes**: No SQL. No Catalyst optimizer. No complex joins (or manual implementation). No schema enforcement. No partitioned writes. Different error surfaces. Different partitioning semantics. Different caching semantics. No Hive metastore integration.
+What changes: no SQL, no Catalyst optimizer, no complex joins (or manual implementation), no schema enforcement, no partitioned writes, different error surfaces, different partitioning semantics, different caching semantics, no Hive metastore integration.
 
-The migration is not a mechanical find-and-replace. It is a rethinking of how you express your data logic, trading Spark's declarative SQL-centric model for Ray Data's functional Python-centric model. The reward is a Python-native runtime with direct access to the ML ecosystem.
+The migration is not a mechanical find-and-replace. It requires rethinking how you express your data logic, trading Spark's declarative SQL-centric model for Ray Data's functional Python-centric model. The payoff is a Python-native runtime with direct access to the ML ecosystem.

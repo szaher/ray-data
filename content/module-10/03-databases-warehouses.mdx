@@ -19,9 +19,9 @@ quiz:
     explanation: "Placing $match (filter) stages early in the MongoDB aggregation pipeline pushes filtering to the database, reducing the volume of data transferred over the network. This is the MongoDB equivalent of predicate pushdown."
 ---
 
-## Connecting Ray Data to Databases
+## Connecting Ray Data to databases
 
-While file-based formats (Parquet, CSV) are the bread and butter of Ray Data, many production pipelines need to read from or write to **relational databases**, **document stores**, and **cloud data warehouses**. Ray Data provides native connectors for SQL databases and MongoDB, and you can integrate with warehouses like BigQuery and Snowflake through their Python SDKs.
+File-based formats (Parquet, CSV) are the bread and butter of Ray Data, but many production pipelines also need to read from or write to **relational databases**, **document stores**, and **cloud data warehouses**. Ray Data provides native connectors for SQL databases and MongoDB, and you can integrate with warehouses like BigQuery and Snowflake through their Python SDKs.
 
 <MermaidDiagram chart={`graph TB
     subgraph "Data Sources"
@@ -59,9 +59,9 @@ While file-based formats (Parquet, CSV) are the bread and butter of Ray Data, ma
     style DS fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## SQL Databases with read_sql()
+## SQL databases with read_sql()
 
-The `ray.data.read_sql()` API reads from any database that provides a **DBAPI 2.0** compatible driver. You supply a SQL query and a **connection factory** -- a callable that returns a fresh connection.
+The `ray.data.read_sql()` API reads from any database that provides a **DBAPI 2.0** compatible driver. You supply a SQL query and a **connection factory**, a callable that returns a fresh connection.
 
 ### PostgreSQL
 
@@ -84,7 +84,7 @@ ds = ray.data.read_sql(
 print(ds.schema())
 print(f"Rows: {ds.count()}")`} language="python" filename="read_postgres.py" />
 
-### Parallelizing SQL Reads
+### Parallelizing SQL reads
 
 By default, `read_sql()` runs the query in a single task. For large tables, you can **partition the read** across multiple workers using the `parallelism` parameter with a partitioning column.
 
@@ -144,7 +144,7 @@ ds = ray.data.read_mongo(
 print(ds.schema())
 print(ds.take(3))`} language="python" filename="read_mongo_basic.py" />
 
-### Filtering with Aggregation Pipelines
+### Filtering with aggregation pipelines
 
 Push filters down to MongoDB using the `pipeline` parameter. This reduces the data transferred over the network.
 
@@ -218,7 +218,7 @@ ds = ds.filter(lambda row: row["revenue"] > 0)`} language="python" filename="big
 
 ## Snowflake
 
-Snowflake integration follows a similar export-then-read pattern, or you can use the Snowflake Connector for Python with `read_sql()`.
+Snowflake integration follows a similar export-then-read pattern. You can also use the Snowflake Connector for Python with `read_sql()`.
 
 <CodeBlock language="python" code={`import ray
 # Option 1: Use read_sql() with the Snowflake connector
@@ -270,15 +270,15 @@ def snowflake_export_to_s3():
 snowflake_export_to_s3()
 ds = ray.data.read_parquet("s3://YOUR_BUCKET/snowflake_export/events/")`} language="python" filename="snowflake_export.py" />
 
-## Connection Pooling and Parallelism Considerations
+## Connection pooling and parallelism considerations
 
-When reading from databases in parallel, keep these practices in mind:
+When reading from databases in parallel, keep these practices in mind.
 
-**Connection limits** -- Each parallel Ray worker opens its own database connection. If you set `parallelism=32`, that is 32 simultaneous connections. Make sure your database can handle the load.
+**Connection limits.** Each parallel Ray worker opens its own database connection. If you set `parallelism=32`, that means 32 simultaneous connections. Make sure your database can handle the load.
 
-**Read-only access** -- Use read replicas for analytical queries to avoid impacting your production write path.
+**Read-only access.** Use read replicas for analytical queries to avoid impacting your production write path.
 
-**Network topology** -- Place your Ray cluster in the same region and VPC as your database to minimize latency and data transfer costs.
+**Network topology.** Place your Ray cluster in the same region and VPC as your database to minimize latency and data transfer costs.
 
 <CodeBlock language="python" code={`import ray
 # Be mindful of connection limits

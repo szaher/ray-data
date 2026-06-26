@@ -19,9 +19,9 @@ quiz:
     explanation: "ds.explain() prints both the logical plan (what you wrote) and the optimized physical plan (what Ray will actually execute), showing which operators were fused."
 ---
 
-## From Logical Plan to Physical Execution
+## From logical plan to physical execution
 
-When you chain operations on a Ray Dataset, nothing executes immediately. Ray Data builds a **logical plan** — a DAG of operators representing your intent. Only when you trigger an action (like `take()`, `write`, or `iter_batches()`) does the planner convert the logical plan into an optimized **physical plan**.
+When you chain operations on a Ray Dataset, nothing executes immediately. Ray Data builds a logical plan, a DAG of operators representing your intent. Only when you trigger an action (like `take()`, `write`, or `iter_batches()`) does the planner convert it into an optimized physical plan.
 
 <MermaidDiagram chart={`graph TD
     L1["Logical: ReadParquet"] --> L2["Logical: Map(parse)"]
@@ -41,7 +41,7 @@ When you chain operations on a Ray Dataset, nothing executes immediately. Ray Da
     style P3 fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Inspecting Plans with `.explain()`
+## Inspecting plans with `.explain()`
 
 You can inspect what Ray Data will actually do before triggering execution.
 
@@ -62,13 +62,13 @@ ds.explain()
 # == Optimized Physical Plan ==
 # ReadParquet -> MapBatches(fn) [fused: Map, Filter, MapBatches]`} />
 
-## Operator Fusion Rules
+## Operator fusion rules
 
-The optimizer fuses operators when the following conditions are met:
+The optimizer fuses operators when these conditions are met:
 
-- **One-to-one operators** like `map`, `filter`, and `map_batches` can be fused together into a single stage.
-- **Read + Map fusion** — a read operator followed by map-like operators can be fused so transformation happens during reading, avoiding a full materialization pass.
-- **Fusion breaks** at shuffle boundaries (`repartition`, `random_shuffle`, `sort`, `groupby`) because data must be fully materialized and redistributed.
+- One-to-one operators like `map`, `filter`, and `map_batches` can be fused together into a single stage.
+- A read operator followed by map-like operators can be fused so transformation happens during reading, avoiding a full materialization pass.
+- Fusion breaks at shuffle boundaries (`repartition`, `random_shuffle`, `sort`, `groupby`) because data must be fully materialized and redistributed.
 
 <CodeBlock language="python" code={`# These three map-like ops will be fused into ONE physical stage
 ds = (
@@ -87,7 +87,7 @@ ds = (
     .map_batches(normalize)      # ─── fused stage 2
 )`} />
 
-## Controlling Fusion
+## Controlling fusion
 
 You can disable fusion or tune plan behavior via `ExecutionOptions`.
 
@@ -100,4 +100,4 @@ ctx.execution_options.preserve_order = True
 ds = ray.data.read_parquet("data/").materialize()
 ds_filtered = ds.filter(is_valid)  # starts a new plan`} />
 
-Understanding execution plans helps you reason about performance — if two stages aren't fusing when you expect them to, `explain()` will reveal why and guide your optimization.
+Understanding execution plans helps you reason about performance. If two stages aren't fusing when you expect them to, `explain()` will reveal why and guide your optimization.

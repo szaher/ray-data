@@ -19,15 +19,15 @@ quiz:
     explanation: "PySpark offers dozens of built-in aggregate functions (approx_count_distinct, percentile_approx, collect_list, etc.) with Catalyst-optimized execution plans. Ray Data supports core aggregations (count, sum, mean, min, max, std) and allows custom aggregations via the AggregateFn class, but the built-in library is smaller."
 ---
 
-## The Same Problem, Two APIs
+## The same problem, two APIs
 
-The best way to understand the differences between PySpark and Ray Data is to see the same operations side by side. Both frameworks can read, transform, aggregate, and write data, but their APIs reflect different design philosophies.
+The clearest way to see the differences between PySpark and Ray Data is to put the same operations side by side. Both frameworks can read, transform, aggregate, and write data, but their APIs reflect different design philosophies.
 
-**PySpark** is DataFrame-centric with SQL integration, lazy evaluation, and the Catalyst optimizer turning your logical operations into optimized physical plans.
+PySpark is DataFrame-centric with SQL integration, lazy evaluation, and the Catalyst optimizer turning logical operations into optimized physical plans.
 
-**Ray Data** is Dataset-centric with a functional API, streaming execution, and Python-native transforms that run directly on Arrow blocks.
+Ray Data is Dataset-centric with a functional API, streaming execution, and Python-native transforms that run directly on Arrow blocks.
 
-## Reading Data
+## Reading data
 
 <CodeBlock language="python" filename="pyspark_read.py" code={`from pyspark.sql import SparkSession
 spark = SparkSession.builder.appName("example").getOrCreate()
@@ -58,9 +58,9 @@ parquet_ds = ray.data.read_parquet(
 )
 `} />
 
-**Key difference**: Spark supports schema enforcement at read time with rich type definitions. Ray Data relies on Arrow schema inference and supports column projection at read time but does not have an equivalent of `StructType` for explicit schema enforcement.
+Spark supports schema enforcement at read time with type definitions like `StructType`. Ray Data relies on Arrow schema inference and supports column projection at read time but has no equivalent for explicit schema enforcement.
 
-## Selecting / Projecting Columns
+## Selecting / projecting columns
 
 <CodeBlock language="python" filename="pyspark_select.py" code={`# PySpark: select specific columns
 result = df.select("name", "age")
@@ -81,9 +81,9 @@ result = ds.map_batches(
 )
 `} />
 
-**Key difference**: Spark has a rich expression language built into `select()` with dozens of built-in functions (`upper`, `lower`, `concat`, `date_format`). Ray Data uses `select_columns` for simple projection, and you drop into Arrow or Pandas for transformations.
+Spark has a built-in expression language with dozens of functions (`upper`, `lower`, `concat`, `date_format`). Ray Data uses `select_columns` for simple projection, and you drop into Arrow or Pandas for transformations.
 
-## Filtering Rows
+## Filtering rows
 
 <CodeBlock language="python" filename="pyspark_filter.py" code={`# PySpark: Column expressions
 filtered = df.filter(col("age") > 30)
@@ -110,9 +110,9 @@ filtered = ds.map_batches(
 )
 `} />
 
-**Key difference**: Spark's filter expressions are analyzed by Catalyst. Writing `df.filter(col("age") > 30).read.parquet(...)` lets Spark push the predicate into the Parquet reader, skipping entire row groups. Ray Data's filter takes an opaque Python lambda — the scheduler cannot push it down, so all data is read first.
+Spark's filter expressions are analyzed by Catalyst. Writing `df.filter(col("age") > 30).read.parquet(...)` lets Spark push the predicate into the Parquet reader, skipping entire row groups. Ray Data's filter takes an opaque Python lambda, so the scheduler cannot push it down. All data is read first.
 
-## Map / Transform
+## Map / transform
 
 <CodeBlock language="python" filename="pyspark_map.py" code={`# PySpark: withColumn for adding/transforming columns
 from pyspark.sql.functions import col, when, length
@@ -156,9 +156,9 @@ def normalize_batch(batch):
 result = ds.map_batches(normalize_batch, batch_format="pandas")
 `} />
 
-**Key difference**: Spark distinguishes between built-in functions (fast, JVM-optimized), row-level UDFs (slow, Python-JVM bridge per row), and Pandas UDFs (vectorized, Arrow-based). Ray Data has `map` (row-level) and `map_batches` (vectorized on Pandas or Arrow batches). In Ray Data, all transforms are Python-native with no JVM bridge.
+Spark distinguishes between built-in functions (fast, JVM-optimized), row-level UDFs (slow, cross the Python-JVM bridge per row), and Pandas UDFs (vectorized, Arrow-based). Ray Data has `map` (row-level) and `map_batches` (vectorized on Pandas or Arrow batches). All Ray Data transforms are Python-native with no JVM bridge.
 
-## GroupBy / Aggregate
+## GroupBy / aggregate
 
 <CodeBlock language="python" filename="pyspark_groupby.py" code={`# PySpark: rich aggregation API
 from pyspark.sql.functions import count, avg, sum, max, collect_list
@@ -210,7 +210,7 @@ custom_agg = AggregateFn(
 result = ds.groupby("city").aggregate(custom_agg)
 `} />
 
-**Key difference**: Spark has a massive library of built-in aggregation functions (approx_count_distinct, percentile_approx, collect_set, stddev, kurtosis, etc.) and full SQL support including HAVING, ROLLUP, and CUBE. Ray Data provides core aggregations and a flexible `AggregateFn` class for custom logic, but the built-in catalog is much smaller.
+Spark has a large library of built-in aggregation functions (approx_count_distinct, percentile_approx, collect_set, stddev, kurtosis, etc.) and full SQL support including HAVING, ROLLUP, and CUBE. Ray Data provides core aggregations and a flexible `AggregateFn` class for custom logic, but the built-in catalog is much smaller.
 
 ## Joins
 
@@ -249,9 +249,9 @@ def join_dept(batch):
 result = ds.map_batches(join_dept, batch_format="pandas")
 `} />
 
-**Key difference**: Joins are Spark's bread and butter — it supports inner, outer, left, right, cross, semi, and anti joins with automatic broadcast optimization for small tables. Ray Data's join support is minimal. For complex joins, you typically pre-join in Spark or implement broadcast-style lookups manually with `ray.put()`.
+Joins are where Spark dominates. It supports inner, outer, left, right, cross, semi, and anti joins with automatic broadcast optimization for small tables. Ray Data's join support is minimal. For complex joins, you typically pre-join in Spark or implement broadcast-style lookups manually with `ray.put()`.
 
-## Writing Output
+## Writing output
 
 <CodeBlock language="python" filename="pyspark_write.py" code={`# PySpark: write with partitioning and format options
 result.write.parquet("s3://bucket/output/", mode="overwrite")
@@ -280,9 +280,9 @@ result.write_parquet(
 )
 `} />
 
-**Key difference**: Spark supports partitioned writes (partitionBy), multiple output formats (Delta, Iceberg, Hudi), append/overwrite modes, and bucketing. Ray Data supports basic format writes with Arrow options. For production data lake writes with ACID guarantees, Spark's ecosystem is significantly more mature.
+Spark supports partitioned writes (partitionBy), multiple output formats (Delta, Iceberg, Hudi), append/overwrite modes, and bucketing. Ray Data supports basic format writes with Arrow options. For production data lake writes with ACID guarantees, Spark's ecosystem is significantly more mature.
 
-## Philosophy Summary
+## Philosophy summary
 
 <MermaidDiagram chart={`graph LR
     subgraph "PySpark Philosophy"
@@ -303,4 +303,4 @@ result.write_parquet(
     style P2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
 `} />
 
-PySpark says: "Tell me what you want (declaratively), and I will figure out the best way to do it." Ray Data says: "Tell me what to do (functionally), and I will run it efficiently across the cluster." Both approaches have merit. Spark's declarative model is more forgiving of naive queries. Ray Data's functional model gives you more control and is more natural for ML workloads where the "transform" is a model inference call, not a SQL expression.
+PySpark says: "Tell me what you want (declaratively), and I will figure out the best way to do it." Ray Data says: "Tell me what to do (functionally), and I will run it efficiently across the cluster." Both approaches have merit. Spark's declarative model is more forgiving of naive queries. Ray Data's functional model gives you more control and fits more naturally into ML workloads where the "transform" is a model inference call, not a SQL expression.

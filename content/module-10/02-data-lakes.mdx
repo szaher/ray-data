@@ -19,9 +19,9 @@ quiz:
     explanation: "Predicate pushdown uses partition metadata and column statistics stored in the table's metadata layer to skip files and row groups that cannot possibly match the filter condition, dramatically reducing the amount of data read from storage."
 ---
 
-## The Lakehouse Pattern
+## The lakehouse pattern
 
-Modern data architectures increasingly use **lakehouse** formats -- open table formats that bring database-like features (ACID transactions, schema evolution, time travel) to files sitting in cloud object stores. Ray Data integrates with the two most popular formats: **Delta Lake** and **Apache Iceberg**.
+Modern data architectures increasingly use **lakehouse** formats: open table formats that bring database-like features (ACID transactions, schema evolution, time travel) to files sitting in cloud object stores. Ray Data integrates with the two most popular formats, **Delta Lake** and **Apache Iceberg**.
 
 <MermaidDiagram chart={`graph TB
     subgraph "Cloud Object Store (S3/GCS/Azure)"
@@ -55,7 +55,7 @@ Modern data architectures increasingly use **lakehouse** formats -- open table f
 
 Both formats store the actual data as **Parquet files** in object storage. The table format adds a metadata layer on top that tracks which files belong to the current table version, column statistics, partition information, and the full history of changes.
 
-## Reading Delta Lake Tables
+## Reading Delta Lake tables
 
 Delta Lake is the most widely adopted lakehouse format, originated at Databricks. Install the `deltalake` Python package to enable Ray Data's Delta integration.
 
@@ -70,7 +70,7 @@ print(ds.schema())
 print(f"Num rows: {ds.count()}")
 print(ds.take(5))`} language="python" filename="read_delta.py" />
 
-### Time Travel with Delta Lake
+### Time travel with Delta Lake
 
 Delta Lake records every write as a new **version** in its transaction log. You can read any historical snapshot by passing the version number.
 
@@ -91,7 +91,7 @@ dt = DeltaTable("s3://YOUR_BUCKET/warehouse/events/")
 print(f"Current version: {dt.version()}")
 print(f"History: {dt.history()}")`} language="python" filename="delta_time_travel.py" />
 
-This is invaluable for **auditing**, **debugging** data issues, and **reproducing** ML training runs with the exact data that was available at a specific point in time.
+This is invaluable for auditing, debugging data issues, and reproducing ML training runs with the exact data that was available at a specific point in time.
 
 ## Writing to Delta Lake
 
@@ -111,7 +111,7 @@ ds.write_delta(
     mode="overwrite",
 )`} language="python" filename="write_delta.py" />
 
-## Reading Apache Iceberg Tables
+## Reading Apache Iceberg tables
 
 Apache Iceberg is the other major lakehouse format, incubated at Netflix and now an Apache top-level project. It is widely used in the Spark, Trino, and Flink ecosystems.
 
@@ -156,9 +156,9 @@ ds = ray.data.read_iceberg(table)
 # Apply transformations
 ds = ds.filter(lambda row: row["duration_seconds"] > 30)`} language="python" filename="iceberg_glue.py" />
 
-## Schema Evolution
+## Schema evolution
 
-Both Delta Lake and Iceberg support **schema evolution** -- adding, removing, or renaming columns without rewriting existing data. Ray Data handles this transparently.
+Both Delta Lake and Iceberg support **schema evolution**, meaning you can add, remove, or rename columns without rewriting existing data. Ray Data handles this transparently.
 
 <CodeBlock language="python" code={`import ray
 # Suppose the Delta table originally had columns: [id, name, email]
@@ -176,9 +176,9 @@ ds_old = ray.data.read_delta(
 print(ds_old.schema())
 # Output: id: int64, name: string, email: string`} language="python" filename="schema_evolution.py" />
 
-## Partition Pruning and Predicate Pushdown
+## Partition pruning and predicate pushdown
 
-Lakehouse formats store **partition metadata** and **column statistics** (min/max values per file). When you apply filters, Ray Data can skip entire files that cannot match, dramatically reducing I/O.
+Lakehouse formats store **partition metadata** and **column statistics** (min/max values per file). When you apply filters, Ray Data can skip entire files that cannot match, which dramatically reduces I/O.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Delta Table (100 files)"
@@ -223,4 +223,4 @@ ds = ray.data.read_parquet(
 )
 print(f"Filtered rows: {ds.count()}")`} language="python" filename="pushdown.py" />
 
-**Key takeaway:** Always push filters as close to the data source as possible. Reading 10 files instead of 1,000 is orders of magnitude faster than reading everything and filtering in Python.
+Always push filters as close to the data source as possible. Reading 10 files instead of 1,000 is orders of magnitude faster than reading everything and filtering in Python.

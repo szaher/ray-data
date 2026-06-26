@@ -19,9 +19,9 @@ quiz:
     explanation: "Ray Data lets you specify resource requirements per operator. This means CPU-bound text processing and GPU-bound image processing can coexist in one pipeline, with Ray scheduling each operator on the right hardware."
 ---
 
-## The Multi-Modal Challenge
+## The multi-modal challenge
 
-Modern AI applications combine text, images, audio, and video. A product catalog has descriptions and photos. A medical record has clinical notes and X-rays. Processing these together in one pipeline -- instead of separate systems -- simplifies architecture and enables cross-modal features.
+Modern AI applications combine text, images, audio, and video. A product catalog has descriptions and photos. A medical record has clinical notes and X-rays. Processing these together in one pipeline instead of separate systems simplifies architecture and enables cross-modal features.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Multi-Modal Input"
@@ -46,7 +46,7 @@ Modern AI applications combine text, images, audio, and video. A product catalog
     style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Reading Multi-Modal Data
+## Reading multi-modal data
 
 Ray Data provides specialized readers for each data type. You can read them separately and combine, or read from a structured dataset that contains mixed types.
 
@@ -66,7 +66,7 @@ audio_ds = ray.data.read_binary_files("s3://catalog/audio_reviews/")
 ds = ray.data.read_parquet("s3://catalog/products/")
 # Columns: product_id, description, image_path, audio_path`} />
 
-## Per-Modality Processing
+## Per-modality processing
 
 Each modality needs its own transform, potentially with different resource requirements. Ray Data lets you specify `num_gpus`, `num_cpus`, and `concurrency` per operator.
 
@@ -118,9 +118,9 @@ image_ds = image_ds.map_batches(
     concurrency=2,
 )`} />
 
-## Joining Modalities
+## Joining modalities
 
-After processing each modality, combine them using a common key. Ray Data supports `zip` for aligned datasets or you can use custom join logic.
+After processing each modality, combine them using a common key. Ray Data supports `zip` for aligned datasets, or you can use custom join logic.
 
 <CodeBlock language="python" code={`import ray
 import pandas as pd
@@ -150,7 +150,7 @@ enriched_ds = text_ds.map_batches(
 )
 enriched_ds.write_parquet("s3://catalog/multi_modal_features/")`} />
 
-## Heterogeneous Resource Scheduling
+## Heterogeneous resource scheduling
 
 <MermaidDiagram chart={`graph LR
     subgraph "CPU Workers"
@@ -173,10 +173,10 @@ enriched_ds.write_parquet("s3://catalog/multi_modal_features/")`} />
     style O fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Key Takeaways
+## Key takeaways
 
-- Ray Data provides **specialized readers** for text, images, binary files, and more
-- Use **class-based UDFs** to load heavy models once and reuse them across batches
-- Assign **per-operator resources** (`num_gpus`, `num_cpus`) to match each modality's needs
-- Combine modalities with **`zip`** (aligned data) or **key-based joins** (shared IDs)
-- One pipeline, multiple data types -- no need for separate processing systems
+- Ray Data provides specialized readers for text, images, binary files, and more.
+- Use class-based UDFs to load heavy models once and reuse them across batches.
+- Assign per-operator resources (`num_gpus`, `num_cpus`) to match each modality's needs.
+- Combine modalities with `zip` (aligned data) or key-based joins (shared IDs).
+- One pipeline handles multiple data types. No need for separate processing systems.

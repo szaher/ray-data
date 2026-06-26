@@ -19,9 +19,9 @@ quiz:
     explanation: "ray.data.read_images() is purpose-built for loading image files from a directory. It reads them as numpy arrays, ready for ML preprocessing."
 ---
 
-## Data Sources
+## Data sources
 
-Ray Data can read from local files, cloud storage (S3, GCS, Azure Blob), and in-memory Python objects. Every reader returns a `Dataset`.
+Ray Data reads from local files, cloud storage (S3, GCS, Azure Blob), and in-memory Python objects. Every reader returns a `Dataset`.
 
 <MermaidDiagram chart={`graph LR
     CSV[CSV Files] --> R[Ray Data Readers]
@@ -39,7 +39,7 @@ Ray Data can read from local files, cloud storage (S3, GCS, Azure Blob), and in-
     style MEM fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} />
 
-## Reading Structured Data
+## Reading structured data
 
 <CodeBlock language="python" code={`import ray
 
@@ -54,7 +54,7 @@ ds = ray.data.read_parquet("s3://bucket/events/", columns=["user_id", "action"])
 # JSON — line-delimited JSON files
 ds = ray.data.read_json("logs/2024-01-*.json")`} />
 
-## Reading Images
+## Reading images
 
 For ML pipelines that process images, `read_images` loads files as numpy arrays.
 
@@ -70,9 +70,9 @@ ds.schema()
 # ------  ----
 # image   numpy.ndarray(shape=(224, 224, 3), dtype=uint8)`} />
 
-## Creating Datasets from Python
+## Creating datasets from Python
 
-Use `from_items` for small in-memory data, useful for testing and prototyping.
+`from_items` works well for small in-memory data, useful for testing and prototyping.
 
 <CodeBlock language="python" code={`# From a list of dictionaries
 ds = ray.data.from_items([
@@ -87,10 +87,10 @@ ds.show(3)
 # {'name': 'Bob', 'age': 25}
 # {'name': 'Carol', 'age': 35}`} />
 
-## Choosing the Right Format
+## Choosing the right format
 
-**Parquet** is almost always the best choice for production. It is columnar, compressed, and supports predicate pushdown — Ray Data reads only the columns and row groups you need.
+Parquet is the best choice for most production use cases. It is columnar, compressed, and supports predicate pushdown, so Ray Data reads only the columns and row groups you need.
 
-**CSV/JSON** work but are slower to read and use more memory. Use them when your upstream system produces them and converting is not an option.
+CSV and JSON work but are slower and use more memory. Use them when your upstream system produces them and converting is not an option.
 
-**read_images** is the right choice when your data is a directory of image files, which is common in computer vision workflows.
+`read_images` is the right choice when your data is a directory of image files, which is common in computer vision workflows.

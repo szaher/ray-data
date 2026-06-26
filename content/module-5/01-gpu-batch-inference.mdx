@@ -19,9 +19,9 @@ quiz:
     explanation: "GPUs achieve peak throughput when processing large batches. Larger batch sizes amortize the CPU-to-GPU data transfer cost and keep GPU cores busy with parallel computation."
 ---
 
-## The GPU Inference Challenge
+## The GPU inference challenge
 
-Running a model on millions of inputs requires solving two problems: **loading the model** (expensive, do it once) and **batching inputs** (GPUs are fast only when saturated). Ray Data solves both with `map_batches` combined with actor pools.
+Running a model on millions of inputs means solving two problems: loading the model (expensive, so you want to do it once) and batching inputs (GPUs only reach full speed when saturated). Ray Data handles both through `map_batches` combined with actor pools.
 
 <MermaidDiagram chart={`graph LR
     DS[Dataset\nMillions of rows] --> B1[Batch 1\n1024 rows]
@@ -39,9 +39,9 @@ Running a model on millions of inputs requires solving two problems: **loading t
     style R2 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
 `} />
 
-## Model Loading with a Callable Class
+## Model loading with a callable class
 
-The key pattern is a **callable class** -- the constructor loads the model once, and `__call__` runs inference on each batch.
+The pattern here is a callable class. The constructor loads the model once, and `__call__` runs inference on each batch.
 
 <CodeBlock language="python" code={`import ray
 from ray.data import ActorPoolStrategy
@@ -62,9 +62,9 @@ class ImageClassifier:
         batch["prediction"] = preds.argmax(dim=1).cpu().numpy()
         return batch`} />
 
-## Putting It Together: ActorPoolStrategy
+## Putting it together: ActorPoolStrategy
 
-`ActorPoolStrategy` tells Ray to create a fixed pool of GPU actors. Each actor loads the model once and processes many batches.
+`ActorPoolStrategy` tells Ray to create a fixed pool of GPU actors. Each actor loads the model once and then processes many batches over its lifetime.
 
 <CodeBlock language="python" code={`ds = ray.data.read_images("s3://my-bucket/images/")
 
@@ -77,9 +77,9 @@ predictions = ds.map_batches(
 
 predictions.write_parquet("s3://my-bucket/results/")`} />
 
-## Tuning Batch Size
+## Tuning batch size
 
-Choose `batch_size` based on GPU memory. Too small wastes GPU cycles; too large causes out-of-memory errors.
+Choose `batch_size` based on GPU memory. Too small wastes GPU cycles. Too large causes out-of-memory errors.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Batch Size Tradeoffs"
@@ -91,4 +91,4 @@ Choose `batch_size` based on GPU memory. Too small wastes GPU cycles; too large 
     style LG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} />
 
-**Rule of thumb:** Start with `batch_size=256`, monitor GPU memory with `nvidia-smi`, and increase until you approach 80% memory usage.
+A reasonable starting point is `batch_size=256`. Monitor GPU memory with `nvidia-smi` and increase until you approach 80% memory usage.

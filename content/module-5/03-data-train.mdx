@@ -19,9 +19,9 @@ quiz:
     explanation: "Ray Data offloads preprocessing to dedicated CPU workers across the cluster. This keeps GPU training workers fully utilized rather than spending cycles on data loading and transformation."
 ---
 
-## The Data Loading Bottleneck
+## The data loading bottleneck
 
-In distributed training, each GPU worker needs a continuous stream of preprocessed batches. If data loading is slow, **GPUs sit idle**. Ray Data solves this by running preprocessing on separate CPU workers and streaming results to trainers.
+In distributed training, each GPU worker needs a continuous stream of preprocessed batches. If data loading is slow, GPUs sit idle. Ray Data addresses this by running preprocessing on separate CPU workers and streaming results to trainers.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Ray Data (CPU workers)"
@@ -39,9 +39,9 @@ In distributed training, each GPU worker needs a continuous stream of preprocess
     style W3 fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Passing Datasets to a Trainer
+## Passing datasets to a trainer
 
-You create your Ray Dataset outside the trainer, then pass it via the `datasets` argument. Ray Train handles sharding automatically.
+Create your Ray Dataset outside the trainer, then pass it via the `datasets` argument. Ray Train handles sharding automatically.
 
 <CodeBlock language="python" code={`import ray
 from ray.train.torch import TorchTrainer
@@ -64,9 +64,9 @@ trainer = TorchTrainer(
 )
 result = trainer.fit()`} />
 
-## The Training Function
+## The training function
 
-Inside each worker, `get_dataset_shard` gives you that worker's portion of the data. Use `iter_torch_batches` to get PyTorch tensors directly.
+Inside each worker, `get_dataset_shard` returns that worker's portion of the data. Use `iter_torch_batches` to get PyTorch tensors directly.
 
 <CodeBlock language="python" code={`import ray.train
 from ray.train import report
@@ -90,7 +90,7 @@ def train_fn(config):
 
         report({"loss": loss.item(), "epoch": epoch})`} />
 
-## Data Flow: End to End
+## Data flow: end to end
 
 <MermaidDiagram chart={`graph TD
     S3["S3 / Parquet Files"] --> RD["ray.data.read_parquet()"]
@@ -110,4 +110,4 @@ def train_fn(config):
     style GPU2 fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-**Key insight:** Preprocessing runs on CPU workers in the Ray cluster, while training runs on GPU workers. The two pipelines overlap via streaming, keeping GPUs fed without idle time.
+Preprocessing runs on CPU workers throughout the Ray cluster while training runs on GPU workers. The two pipelines overlap via streaming, keeping GPUs fed without idle time.

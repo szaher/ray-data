@@ -19,9 +19,9 @@ quiz:
     explanation: "concurrency sets how many actor replicas run simultaneously. With num_gpus=1 per actor, concurrency=4 means 4 GPUs process different batches in parallel."
 ---
 
-## Scaling LLM Inference with Ray Data
+## Scaling LLM inference with Ray Data
 
-Running an LLM over millions of prompts is a perfect Ray Data workload: each prompt is independent, GPU utilization is critical, and batching improves throughput.
+Running an LLM over millions of prompts fits Ray Data well. Each prompt is independent, GPU utilization is critical, and batching improves throughput.
 
 <MermaidDiagram chart={`graph LR
     A[Read Prompts\nParquet] --> B[LLM Inference\nGPU Actors]
@@ -31,9 +31,9 @@ Running an LLM over millions of prompts is a perfect Ray Data workload: each pro
     style C fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-## Approach 1 — HuggingFace Transformers
+## Approach 1: HuggingFace Transformers
 
-Ideal for models that fit on a single GPU.
+This works well for models that fit on a single GPU.
 
 <CodeBlock language="python" code={`import ray
 
@@ -57,9 +57,9 @@ ds = ds.map_batches(HFPredictor, batch_size=32, concurrency=4, num_gpus=1)
 ds.write_parquet("s3://data/results/")
 `} />
 
-## Approach 2 — vLLM for High Throughput
+## Approach 2: vLLM for high throughput
 
-vLLM uses PagedAttention and continuous batching. It supports tensor parallelism across multiple GPUs for large models.
+vLLM uses PagedAttention and continuous batching. It also supports tensor parallelism across multiple GPUs for large models.
 
 <CodeBlock language="python" code={`class VLLMPredictor:
     def __init__(self):
@@ -76,7 +76,7 @@ vLLM uses PagedAttention and continuous batching. It supports tensor parallelism
 ds.map_batches(VLLMPredictor, batch_size=256, concurrency=2, num_gpus=4)
 `} />
 
-## Resource Layout
+## Resource layout
 
 <MermaidDiagram chart={`graph TD
     DS[Dataset\n1M prompts] --> A1[Actor 1\n4 GPUs\ntensor parallel]
@@ -89,4 +89,4 @@ ds.map_batches(VLLMPredictor, batch_size=256, concurrency=2, num_gpus=4)
     style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
 `} />
 
-**Batch size guidance:** HuggingFace works best with 8-64 (memory-bound). vLLM handles 128-512 efficiently via internal continuous batching. Increase until GPU memory hits ~90%.
+For batch size guidance: HuggingFace works best with 8-64 (memory-bound). vLLM handles 128-512 efficiently via internal continuous batching. Increase until GPU memory hits ~90%.

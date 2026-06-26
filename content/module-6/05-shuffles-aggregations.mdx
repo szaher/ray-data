@@ -19,9 +19,9 @@ quiz:
     explanation: "groupby().map_groups() first shuffles data so that all rows sharing the same key value are in the same block, then applies fn to each group as a complete batch — enabling group-level aggregations and transformations."
 ---
 
-## The Cost of Shuffles
+## The cost of shuffles
 
-Most Ray Data operations are **pipelined** — data flows through map and filter stages without full materialization. But some operations require **shuffling**: redistributing data across all workers. Shuffles are expensive because they break the streaming model.
+Most Ray Data operations are pipelined: data flows through map and filter stages without full materialization. Some operations, though, require shuffling, which redistributes data across all workers. Shuffles are expensive because they break the streaming model.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Pipelined (Fast)"
@@ -74,7 +74,7 @@ ds = ds.sort("score", descending=True)
 # Multi-column sort
 ds = ds.sort(["category", "score"], descending=[False, True])`} />
 
-## GroupBy and Aggregations
+## GroupBy and aggregations
 
 `groupby()` shuffles data so all rows with the same key are colocated, then applies aggregations or arbitrary group functions.
 
@@ -104,9 +104,9 @@ ds_normed = ds.groupby("category").map_groups(
     normalize_group, batch_format="pandas"
 )`} />
 
-## Random Shuffle
+## Random shuffle
 
-`random_shuffle()` randomizes row order across the entire dataset — essential for ML training to avoid ordering bias.
+`random_shuffle()` randomizes row order across the entire dataset. This is essential for ML training to avoid ordering bias.
 
 <CodeBlock language="python" code={`# Full global shuffle
 ds = ray.data.read_parquet("training_data/").random_shuffle()
@@ -122,7 +122,7 @@ for batch in ds.iter_batches(
 ):
     train_step(batch)`} />
 
-## When to Use Each Operation
+## When to use each operation
 
 | Operation | Use Case | Cost |
 |---|---|---|
@@ -134,4 +134,4 @@ for batch in ds.iter_batches(
 | `random_shuffle()` | Global randomization for training | High |
 | `iter_batches(local_shuffle_buffer_size=N)` | Approximate shuffle during training | Low |
 
-The key takeaway: **avoid shuffles when possible**. Use `local_shuffle_buffer_size` instead of `random_shuffle()` when approximate randomness suffices, and prefer `repartition(shuffle=False)` when you only need to adjust block counts.
+Avoid shuffles when possible. Use `local_shuffle_buffer_size` instead of `random_shuffle()` when approximate randomness suffices, and prefer `repartition(shuffle=False)` when you only need to adjust block counts.

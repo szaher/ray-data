@@ -1,5 +1,6 @@
 ---
 title: "Architecture: Ray vs Spark"
+description: "Execution models, memory, and optimizer tradeoffs"
 quiz:
   - question: "What is the fundamental difference between Spark's and Ray's execution models?"
     options:
@@ -16,7 +17,7 @@ quiz:
       - "Spark uses more memory than Ray in every scenario"
       - "There is no difference — both use JVM heap memory"
     correctIndex: 1
-    explanation: "Ray's Object Store uses shared memory (built on Apache Arrow/Plasma) allowing multiple workers on the same node to read data via memory-mapping without copying. Spark stores data in per-executor JVM heap (and off-heap) memory, requiring serialization when data moves between executors or stages."
+    explanation: "Ray stores remote objects in a per-node shared-memory object store. Same-node access can avoid copies for supported object types (NumPy arrays), while other Python objects are deserialized. Spark stores data in per-executor JVM heap (and off-heap) memory, requiring serialization when data moves between executors or stages."
 ---
 
 ## Two frameworks, different origins
@@ -124,9 +125,9 @@ Spark's JVM memory layout:
 - PySpark adds another layer: data must cross the JVM-Python boundary via Arrow serialization
 
 Ray's shared-memory object store:
-- Built on Apache Arrow / Plasma
+- Per-node shared-memory object store
 - Each node has a shared-memory region (default 30% of RAM)
-- Workers on the same node read objects via memory-mapped files, giving true zero-copy access
+- Workers on the same node access objects via memory-mapped files — zero-copy for NumPy arrays; other objects are deserialized
 - No JVM, no garbage collection pauses, no Tungsten encoding
 - Data is stored in Arrow columnar format natively
 
@@ -139,7 +140,7 @@ Ray's shared-memory object store:
         PY[Python Subprocess] ---|"Arrow\nserialization"| JH
     end
     subgraph "Ray Worker Memory"
-        OS[Shared Object Store\nApache Arrow / Plasma]
+        OS[Shared Object Store]
         WP1[Worker Process 1] ---|"mmap\nzero-copy"| OS
         WP2[Worker Process 2] ---|"mmap\nzero-copy"| OS
         WP3[Worker Process 3] ---|"mmap\nzero-copy"| OS

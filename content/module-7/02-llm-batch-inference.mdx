@@ -1,5 +1,6 @@
 ---
 title: "LLM Batch Inference"
+description: "Running large language models on batches with actor pools"
 quiz:
   - question: "Why does the LLM class load the model in __init__ instead of __call__?"
     options:
@@ -16,7 +17,7 @@ quiz:
       - "The maximum GPU memory per actor"
       - "The model's context window size"
     correctIndex: 1
-    explanation: "concurrency sets how many actor replicas run simultaneously. With num_gpus=1 per actor, concurrency=4 means 4 GPUs process different batches in parallel."
+    explanation: "The compute parameter with ActorPoolStrategy(size=N) sets how many actor replicas run simultaneously. With num_gpus=1 per actor, ActorPoolStrategy(size=4) means 4 GPUs process different batches in parallel."
 ---
 
 ## Scaling LLM inference with Ray Data
@@ -53,7 +54,7 @@ class HFPredictor:
         batch["response"] = [o[0]["generated_text"] for o in outputs]
         return batch
 
-ds = ds.map_batches(HFPredictor, batch_size=32, concurrency=4, num_gpus=1)
+ds = ds.map_batches(HFPredictor, batch_size=32, compute=ray.data.ActorPoolStrategy(size=4), num_gpus=1)
 ds.write_parquet("s3://data/results/")
 `} />
 
@@ -73,7 +74,7 @@ vLLM uses PagedAttention and continuous batching. It also supports tensor parall
         batch["response"] = [o.outputs[0].text for o in outputs]
         return batch
 
-ds.map_batches(VLLMPredictor, batch_size=256, concurrency=2, num_gpus=4)
+ds.map_batches(VLLMPredictor, batch_size=256, compute=ray.data.ActorPoolStrategy(size=2), num_gpus=4)
 `} />
 
 ## Resource layout

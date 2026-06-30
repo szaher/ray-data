@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:deprecated-concurrency": "node scripts/check-deprecated-concurrency.mjs"
   },
   "dependencies": {
     "@anthropic-ai/vertex-sdk": "^0.16.1",

@@ -1,5 +1,6 @@
 ---
 title: "Debugging with the Dashboard"
+description: "Using Ray Dashboard to diagnose stuck or failed jobs"
 quiz:
   - question: "What is the first indicator of an out-of-memory (OOM) problem visible on the Ray Dashboard?"
     options:
@@ -71,7 +72,7 @@ Common fixes for OOM:
 # Fix 1: Reduce block size so fewer bytes are in flight
 ds = ray.data.read_parquet("s3://bucket/data/", override_num_blocks=200)
 # Fix 2: Limit concurrent tasks to reduce memory pressure
-ds = ds.map(heavy_transform, concurrency=4)
+ds = ds.map(heavy_transform, compute=ray.data.TaskPoolStrategy(size=4))
 # Fix 3: Enable more aggressive backpressure
 ctx = ray.data.DataContext.get_current()
 ctx.target_max_block_size = 64 * 1024 * 1024  # 64MB blocks

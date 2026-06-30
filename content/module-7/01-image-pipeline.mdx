@@ -1,5 +1,6 @@
 ---
 title: "Image Processing Pipeline"
+description: "End-to-end image read, preprocess, and GPU inference"
 quiz:
   - question: "Why is map_batches preferred over map for image processing in Ray Data?"
     options:
@@ -72,7 +73,7 @@ class ImageClassifier:
             preds = self.model(tensors).argmax(dim=1).cpu().numpy()
         return {"label": [self.labels[p] for p in preds]}
 
-ds = ds.map_batches(ImageClassifier, batch_size=64, concurrency=2, num_gpus=1)
+ds = ds.map_batches(ImageClassifier, batch_size=64, compute=ray.data.ActorPoolStrategy(size=2), num_gpus=1)
 ds.write_parquet("s3://my-bucket/results/")
 `} />
 
@@ -95,4 +96,4 @@ ds.write_parquet("s3://my-bucket/results/")
     style W fill:#68d391,stroke:#68d391,color:#1a1d27
 `} fallback="CPU workers preprocess images, then fan out to multiple GPU actors for parallel inference" />
 
-`read_images` handles decoding. CPU transforms run on many workers automatically. The GPU stage uses a class-based callable so the model loads once, and `concurrency=2` runs two GPU actors in parallel.
+`read_images` handles decoding. CPU transforms run on many workers automatically. The GPU stage uses a class-based callable so the model loads once, and `compute=ray.data.ActorPoolStrategy(size=2)` runs two GPU actors in parallel.

@@ -1,5 +1,6 @@
 ---
 title: "Configuration & Tuning Reference"
+description: "Resource allocation, batch sizing, and backpressure settings"
 quiz: []
 ---
 
@@ -48,21 +49,28 @@ ds = ray.data.read_parquet("small_data/", override_num_blocks=4)
 
 Increase when you have a few large files and want more parallelism. Decrease when you have many tiny files and scheduling overhead dominates.
 
-### concurrency in map_batches
+### compute in map_batches
+
+Ray Data deprecates the `concurrency` parameter in favor of `compute`. Use `TaskPoolStrategy` for plain functions and `ActorPoolStrategy` for callable classes. Autoscaling with `min_size` and `max_size` requires a callable class.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `concurrency` | Auto (one task per available CPU) | Max number of concurrent map workers |
+| `compute` | Auto (one task per available CPU) | Strategy controlling worker pool type and size |
 
-<CodeBlock language="python" filename="concurrency.py" code={`# Default: Ray decides based on available resources
+<CodeBlock language="python" filename="compute_strategy.py" code={`# Default: Ray decides based on available resources
 ds = ds.map_batches(transform_fn)
-# Fixed concurrency: exactly 8 workers
-ds = ds.map_batches(transform_fn, concurrency=8)
-# Range: between 2 and 16 workers, Ray auto-scales within range
-ds = ds.map_batches(transform_fn, concurrency=(2, 16))
+# Fixed task pool: exactly 8 workers for a plain function
+ds = ds.map_batches(transform_fn, compute=ray.data.TaskPoolStrategy(size=8))
+# Actor pool with autoscaling (requires a callable class)
+class HeavyTransform:
+    def __init__(self):
+        self.model = load_model()
+    def __call__(self, batch):
+        return self.model.predict(batch)
+ds = ds.map_batches(HeavyTransform, compute=ray.data.ActorPoolStrategy(min_size=2, max_size=16))
 `} />
 
-Set a fixed number when your transform has specific resource requirements (e.g., each worker loads a model into memory). Use a range to let Ray auto-scale based on available resources.
+Use `TaskPoolStrategy` for stateless functions. Use `ActorPoolStrategy` for classes that load expensive resources in `__init__`. Use `min_size`/`max_size` with `ActorPoolStrategy` to let Ray auto-scale the actor pool based on available resources.
 
 ---
 
@@ -290,7 +298,6 @@ ds = ds.map_batches(
     compute=ActorPoolStrategy(size=4),
     batch_size=64,
     num_gpus=1,
-    concurrency=4,
 )
 # 6. Write output
 ds.write_parquet(

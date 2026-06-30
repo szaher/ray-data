@@ -1,5 +1,6 @@
 ---
 title: "Memory Issues & OOM Debugging"
+description: "Identifying and resolving out-of-memory failures"
 quiz:
   - question: "What is the Ray object store?"
     options:
@@ -202,7 +203,7 @@ print(f"After repartition: {ds.num_blocks()} blocks")`} language="python" filena
 # Default: Ray uses all available CPUs
 ds = ds.map_batches(
     HeavyModelInference,
-    concurrency=2,        # only 2 workers at a time
+    compute=ray.data.ActorPoolStrategy(size=2),
     batch_size=128,       # small batches
     num_gpus=1,           # each worker gets 1 GPU
 )`} language="python" filename="limit_concurrency.py" />

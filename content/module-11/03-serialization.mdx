@@ -1,5 +1,6 @@
 ---
 title: "Serialization Problems"
+description: "Fixing pickle failures with classes, closures, and connections"
 quiz:
   - question: "Why does Ray use pickle to send data between workers?"
     options:
@@ -79,7 +80,7 @@ class DatabaseLookup:
     def __call__(self, row):
         self.cursor.execute("SELECT * FROM lookup WHERE id=%s", (row["id"],))
         return {"id": row["id"], "result": self.cursor.fetchone()}
-ds = ds.map(DatabaseLookup, concurrency=4)`} language="python" filename="fix_database.py" />
+ds = ds.map(DatabaseLookup, compute=ray.data.ActorPoolStrategy(size=4))`} language="python" filename="fix_database.py" />
 
 ### Pattern 2: ML model loading
 
@@ -103,7 +104,7 @@ class ModelPredictor:
             inputs = torch.tensor(batch["input"]).to(self.device)
             preds = self.model(inputs).cpu().numpy()
         return {"pred": preds}
-ds = ds.map_batches(ModelPredictor, concurrency=2, num_gpus=1, batch_size=256)`} language="python" filename="fix_model.py" />
+ds = ds.map_batches(ModelPredictor, compute=ray.data.ActorPoolStrategy(size=2), num_gpus=1, batch_size=256)`} language="python" filename="fix_model.py" />
 
 ### Pattern 3: file handles and clients
 
@@ -120,7 +121,7 @@ class HttpFetcher:
     def __call__(self, row):
         response = self.client.get(row["url"])
         return {"url": row["url"], "response": response.text, "status": response.status_code}
-ds = ds.map(HttpFetcher, concurrency=8)`} language="python" filename="fix_http_client.py" />
+ds = ds.map(HttpFetcher, compute=ray.data.ActorPoolStrategy(size=8))`} language="python" filename="fix_http_client.py" />
 
 ---
 
@@ -223,13 +224,13 @@ class ExpensiveTransform:
 ds = ray.data.read_parquet("data/")
 ds = ds.map_batches(
     ExpensiveTransform,
-    concurrency=4,    # 4 persistent actors, each loads model once
+    compute=ray.data.ActorPoolStrategy(size=4),
     batch_size=256,
     num_gpus=1,       # each actor gets 1 GPU
 )`} language="python" filename="actor_pool.py" />
 
 <MermaidDiagram chart={`flowchart TD
-    subgraph "Actor Pool (concurrency=4)"
+    subgraph "Actor Pool (compute=ActorPoolStrategy)"
         A1["Actor 1\n__init__: load model\n__call__: batch 1, 5, 9..."]
         A2["Actor 2\n__init__: load model\n__call__: batch 2, 6, 10..."]
         A3["Actor 3\n__init__: load model\n__call__: batch 3, 7, 11..."]
@@ -263,7 +264,7 @@ Use this flowchart when you hit a serialization error:
     B -->|"Large read-only data\n(lookup table, config)"| D["Use ray.put() to store\nin object store once"]
     B -->|"ML Model"| E{Need GPU?}
     E -->|Yes| F["Class-based transform\nwith num_gpus=1"]
-    E -->|No| G["Class-based transform\nwith concurrency=N"]
+    E -->|No| G["Class-based transform\nwith compute=ActorPoolStrategy(size=N)"]
     B -->|"Lambda closure"| H[Replace with named function\nor class-based transform]
     style A fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style C fill:#68d391,stroke:#68d391,color:#1a1d27

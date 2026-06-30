@@ -1,5 +1,6 @@
 ---
 title: "Common Errors & How to Fix Them"
+description: "Diagnosing serialization, type, and resource errors"
 quiz:
   - question: "What is the most likely cause of 'RaySystemError: Object store full'?"
     options:
@@ -124,7 +125,7 @@ class QueryDatabase:
         cursor = self.conn.cursor()
         cursor.execute(row["query"])
         return {"result": cursor.fetchone()}
-ds.map(QueryDatabase, concurrency=4)`} language="python" filename="fix_pickle.py" />
+ds.map(QueryDatabase, compute=ray.data.ActorPoolStrategy(size=4))`} language="python" filename="fix_pickle.py" />
 
 ---
 
@@ -232,11 +233,11 @@ The fix:
 <CodeBlock code={`# Fix 1: Reduce batch size
 ds = ds.map_batches(process, batch_size=512)  # smaller batches = less memory
 # Fix 2: Limit concurrency to reduce parallel memory usage
-ds = ds.map_batches(process, concurrency=2)  # fewer workers = less total memory
+ds = ds.map_batches(process, compute=ray.data.TaskPoolStrategy(size=2))
 # Fix 3: Use ActorPoolStrategy to share a model across calls
 ds = ds.map_batches(
     ModelProcessor,
-    concurrency=2,         # only 2 actors, each loads the model once
+    compute=ray.data.ActorPoolStrategy(size=2),
     batch_size=256,
 )
 # Fix 4: Set memory budget for Ray Data

@@ -1,5 +1,6 @@
 ---
 title: "Common Patterns & Recipes"
+description: "Reusable solutions for frequent Ray Data tasks"
 quiz: []
 ---
 
@@ -260,7 +261,7 @@ urls = ray.data.from_items([{"url": u} for u in url_list])
 ds = urls.map_batches(
     download_and_extract,
     batch_size=16,
-    concurrency=8,
+    compute=ray.data.TaskPoolStrategy(size=8),
     batch_format="numpy",
 )
 ds.write_parquet("downloaded_pages/")

@@ -1,5 +1,6 @@
 ---
 title: "Transformations"
+description: "Applying map, flat_map, and filter to distributed data"
 quiz:
   - question: "What is the key difference between map() and map_batches()?"
     options:
@@ -76,7 +77,7 @@ class Predictor:
         batch["pred"] = self.model.predict(batch["features"].tolist())
         return batch
 
-ds = ds.map_batches(Predictor, concurrency=4, num_gpus=1)`} />
+ds = ds.map_batches(Predictor, compute=ray.data.ActorPoolStrategy(size=4), num_gpus=1)`} />
 
 ## flat_map: one-to-many
 

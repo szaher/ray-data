@@ -13,11 +13,11 @@ quiz:
   - question: "What is the purpose of calling ds.materialize() for fault tolerance?"
     options:
       - "It converts the dataset to a pandas DataFrame"
-      - "It pins computed blocks in the object store, creating a checkpoint that truncates the lineage"
+      - "It executes the pipeline and pins blocks in object-store memory for reuse, but does not provide durable checkpointing"
       - "It saves the dataset to disk automatically"
       - "It disables lazy execution permanently"
     correctIndex: 1
-    explanation: "materialize() forces full computation and pins blocks in the object store. This acts as a checkpoint — if downstream stages fail, they only need to recompute from the materialized point rather than all the way back to the original source."
+    explanation: "materialize() executes the dataset and pins the returned blocks in Ray's object-store memory. This avoids re-executing upstream stages while the cluster is running. It is not a durable checkpoint — for recovery across node failures or job restarts, write intermediate results to durable storage."
 ---
 
 ## Failures are inevitable at scale
@@ -75,13 +75,13 @@ When a worker holding computed blocks dies, those blocks are lost from the objec
     style SRC fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
 `} fallback="Ray reconstructs lost blocks by replaying the recorded lineage chain from durable sources" />
 
-## Checkpointing with materialize()
+## In-memory materialization with materialize()
 
-Long pipelines can have deep lineage chains. If a block near the end is lost, recomputation might cascade all the way back to the source. Use `materialize()` to create checkpoints that truncate lineage.
+`materialize()` executes the dataset and pins the returned blocks in Ray's object-store memory for reuse during the running cluster. It is not a durable checkpoint. For recovery across node failures or job restarts, write intermediate results to durable storage.
 
 <CodeBlock language="python" code={`import ray
 
-# Without checkpointing: failure at stage 3 recomputes from stage 1
+# Without materialization: failure at stage 3 re-executes from stage 1
 ds = (
     ray.data.read_parquet("s3://bucket/raw/")
     .map_batches(expensive_parse)
@@ -89,11 +89,11 @@ ds = (
     .map_batches(expensive_inference)    # ...recompute from read
 )
 
-# With checkpointing: failure at stage 3 only recomputes from checkpoint
+# With materialization: re-execution starts here, not from read
 ds = ray.data.read_parquet("s3://bucket/raw/")
-ds = ds.map_batches(expensive_parse).materialize()    # checkpoint!
-ds = ds.map_batches(expensive_transform).materialize() # checkpoint!
-ds = ds.map_batches(expensive_inference)  # failure only re-runs this`} />
+ds = ds.map_batches(expensive_parse).materialize()    # pin in memory
+ds = ds.map_batches(expensive_transform).materialize() # pin in memory
+ds = ds.map_batches(expensive_inference)  # if this fails, upstream blocks are already in memory`} />
 
 ## Configuring fault tolerance
 
@@ -113,9 +113,10 @@ ds.write_parquet("s3://output/")`} />
 
 - **Understand retry defaults.** By default, Ray retries a task up to three times when its worker process or node dies. Set `max_retries` in `ray_remote_args` to override that limit. Application exceptions are not retried unless `retry_exceptions` is enabled.
 - **Keep transforms idempotent.** Retries re-execute your function, so avoid side effects that can't be repeated safely.
-- **Checkpoint before expensive stages.** Use `materialize()` or write to durable storage to limit recomputation.
+- **Materialize before expensive stages.** Use `materialize()` to pin results in object-store memory so upstream stages are not re-executed while the cluster is running.
+- **Use durable storage for recovery.** Write intermediate results to S3/GCS with `write_parquet()` — this is the only mechanism that survives node failures or job restarts.
 - **Use durable sources.** Lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
 - **Monitor retries.** Excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.
 
-[ray-ft]: https://docs.ray.io/en/latest/ray-core/fault_tolerance/tasks.html "Task Fault Tolerance — Ray 2.55.1 (accessed June 2026)"
-[ray-node-ft]: https://docs.ray.io/en/latest/ray-core/fault_tolerance/nodes.html "Node Fault Tolerance — Ray 2.55.1 (accessed June 2026)"
+[ray-ft]: https://docs.ray.io/en/v2.55.1/ray-core/fault_tolerance/tasks.html "Task Fault Tolerance — Ray 2.55.1 (accessed June 2026)"
+[ray-node-ft]: https://docs.ray.io/en/v2.55.1/ray-core/fault_tolerance/nodes.html "Node Fault Tolerance — Ray 2.55.1 (accessed June 2026)"

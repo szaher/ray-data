@@ -12,7 +12,7 @@ mkdir -p "$OUTPUT_DIR"
 echo "Building Ray Data Academy presentations..."
 echo ""
 
-for deck in 01-*.md 02-*.md 03-*.md 04-*.md; do
+for deck in 01-*.md 02-*.md 03-*.md 04-*.md 05-*.md; do
   [ -f "$deck" ] || continue
   name="${deck%.md}"
   echo "  Building $deck -> $name.html"

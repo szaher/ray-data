@@ -616,7 +616,7 @@ ref = generate_data.remote()
 
 data = ray.get(ref)  <span class="hljs-comment"># Fetch the actual array</span>
 </code></pre>
-<p>Each node runs an object store built on Apache Arrow's Plasma, using <strong>shared memory</strong> so multiple workers read the same data without copying.</p>
+<p>Each node runs a shared-memory object store so multiple workers read the same data without copying.</p>
 <footer>Session 1: Why Ray?</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="32" data-paginate="true" data-header="Ray Data Academy" data-footer="Session 1: Why Ray?" data-theme="ray-academy" lang="en-IE" data-marpit-pagination="32" style="--paginate:true;--header:Ray Data Academy;--footer:Session 1: Why Ray?;--theme:ray-academy;" data-marpit-pagination-total="44">

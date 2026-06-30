@@ -1,5 +1,6 @@
 ---
 title: "ML Frameworks: PyTorch, TF & HuggingFace"
+description: "Using Ray Data as the data layer for ML training and inference"
 quiz:
   - question: "What is the key advantage of using ds.iter_torch_batches() over a standard PyTorch DataLoader?"
     options:
@@ -155,7 +156,7 @@ class TokenizeText:
 tokenized_ds = ds.map_batches(
     TokenizeText,
     batch_format="pandas",
-    concurrency=4,  # number of tokenizer actors
+    compute=ray.data.ActorPoolStrategy(size=4),
 )
 print(tokenized_ds.schema())
 print(tokenized_ds.take(1))`} language="python" filename="hf_tokenize.py" />
@@ -196,7 +197,7 @@ ds = ray.data.read_json("s3://YOUR_BUCKET/reviews/")
 results = ds.map_batches(
     SentimentPredictor,
     batch_format="pandas",
-    concurrency=4,         # 4 model replicas
+    compute=ray.data.ActorPoolStrategy(size=4),
     num_gpus=1,            # 1 GPU per replica
     batch_size=32,         # inference batch size
 )
@@ -328,10 +329,10 @@ ds = ray.data.read_images("s3://YOUR_BUCKET/images/", mode="RGB")
 # Run batch inference across 8 GPU actors
 predictions = ds.map_batches(
     ImageClassifier,
-    concurrency=8,
+    compute=ray.data.ActorPoolStrategy(size=8),
     num_gpus=1,
     batch_size=64,
 )
 predictions.write_parquet("s3://YOUR_BUCKET/image_predictions/")`} language="python" filename="batch_inference.py" />
 
-The pattern: use a class with `__init__` (load model once) and `__call__` (process each batch). Set `concurrency` to control the number of model replicas and `num_gpus` to assign GPU resources per replica.
+The pattern: use a class with `__init__` (load model once) and `__call__` (process each batch). Set `compute=ray.data.ActorPoolStrategy(size=N)` to control the number of model replicas and `num_gpus` to assign GPU resources per replica.

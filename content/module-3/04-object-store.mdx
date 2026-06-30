@@ -17,7 +17,7 @@ quiz:
       - "Data transfer between nodes requires no network"
       - "Objects are never serialized"
     correctIndex: 1
-    explanation: "Zero-copy means that workers on the same node access the object directly from shared memory (Plasma) via memory mapping. The data is not duplicated into each worker's heap, saving both time and memory."
+    explanation: "Zero-copy means that workers on the same node access the object directly from shared memory via memory mapping. The data is not duplicated into each worker's heap, saving both time and memory."
 ---
 
 ## The ObjectRef
@@ -123,4 +123,4 @@ Use `ray.put()` when passing the same large object to many tasks. Pass `ObjectRe
 
 > **Reference:** [Objects — Ray 2.55.1][ray-objects] (accessed June 2026)
 
-[ray-objects]: https://docs.ray.io/en/latest/ray-core/objects.html "Objects — Ray 2.55.1 (accessed June 2026)"
+[ray-objects]: https://docs.ray.io/en/v2.55.1/ray-core/objects.html "Objects — Ray 2.55.1 (accessed June 2026)"

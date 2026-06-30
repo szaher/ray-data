@@ -1,5 +1,6 @@
 ---
 title: "Multi-Modal Data Pipelines"
+description: "Processing images, text, and audio in a single pipeline"
 quiz:
   - question: "What makes multi-modal pipelines different from single-modal ones?"
     options:
@@ -108,14 +109,14 @@ text_ds = text_ds.map_batches(
     TextEmbedder,
     batch_size=256,
     num_cpus=2,
-    concurrency=4,
+    compute=ray.data.ActorPoolStrategy(size=4),
 )
 
 image_ds = image_ds.map_batches(
     ImageEmbedder,
     batch_size=32,
     num_gpus=1,
-    concurrency=2,
+    compute=ray.data.ActorPoolStrategy(size=2),
 )`} />
 
 ## Joining modalities

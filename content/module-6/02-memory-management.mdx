@@ -1,5 +1,6 @@
 ---
 title: "Memory Management"
+description: "Backpressure, spilling, and object store tuning"
 quiz:
   - question: "What happens when Ray Data runs out of object store memory during execution?"
     options:
@@ -21,7 +22,7 @@ quiz:
 
 ## How Ray Data uses memory
 
-Ray Data stores intermediate data as blocks in the Ray object store, a shared-memory plasma store on each node. The streaming executor processes data stage by stage, but producers can outrun consumers, causing memory to grow. Understanding this pipeline is the key to tuning large-scale jobs.
+Ray Data stores intermediate data as blocks in the Ray object store, a shared-memory object store on each node. The streaming executor processes data stage by stage, but producers can outrun consumers, causing memory to grow. Understanding this pipeline is the key to tuning large-scale jobs.
 
 <MermaidDiagram chart={`graph LR
     R["Read\n(Producer)"] -->|blocks| OS["Object Store\n(Shared Memory)"]
@@ -85,7 +86,7 @@ ds = ray.data.read_parquet("s3://bucket/huge/").map_batches(
     heavy_model_inference,
     batch_size=1024,
     num_gpus=1,
-    concurrency=2,  # At most 2 workers running this op at once
+    compute=ray.data.TaskPoolStrategy(size=2),
 )
 
 # Preserve output ordering (costs more memory due to buffering)

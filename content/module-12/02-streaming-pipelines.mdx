@@ -1,5 +1,6 @@
 ---
 title: "Streaming Data Pipelines"
+description: "Building continuous ingestion and processing pipelines"
 quiz:
   - question: "What is the main advantage of Ray Data's streaming execution model?"
     options:
@@ -122,7 +123,7 @@ ds = ds.map_batches(
     run_inference,  # Slow GPU operator
     batch_size=32,
     num_gpus=1,
-    concurrency=4,
+    compute=ray.data.ActorPoolStrategy(size=4),
 )
 ds.write_parquet("s3://my-bucket/predictions/")`} />
 

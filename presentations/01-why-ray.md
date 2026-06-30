@@ -570,7 +570,7 @@ print(type(ref))   # <class 'ray.ObjectRef'>
 data = ray.get(ref)  # Fetch the actual array
 ```
 
-Each node runs an object store built on Apache Arrow's Plasma, using **shared memory** so multiple workers read the same data without copying.
+Each node runs a shared-memory object store so multiple workers read the same data without copying.
 
 ---
 

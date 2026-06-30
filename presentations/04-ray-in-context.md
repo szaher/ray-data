@@ -92,7 +92,7 @@ graph TD
 
 - GCS coordinates raylets (one per node)
 - Workers are **native Python processes** -- no JVM in the path
-- Each node has a shared-memory **object store** (Arrow/Plasma)
+- Each node has a shared-memory **object store**
 
 <!-- No JVM means no GC pauses, no serialization bridge for Python code. Your UDF runs directly in the worker process. -->
 

@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ray Data Academy
 
-## Getting Started
+An interactive learning platform for mastering distributed data processing with [Ray Data](https://docs.ray.io/en/latest/data/data.html). Built on the [learn-template](https://github.com/szaher/learn-template) platform.
 
-First, run the development server:
+## Features
+
+- **13 modules, 58 lessons** covering Ray Data from foundations to production patterns
+- **Interactive MDX content** with live code blocks, Mermaid diagrams, and quizzes
+- **AI tutor** powered by Claude — ask questions, get diagrams and code examples
+- **Text-to-speech** with voice selection for accessible learning
+- **Export** lessons to Markdown or Jupyter notebooks
+- **Slide decks** built with Marp for presentations
+
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm validate    # content quality gates (MDX, links, accessibility)
+pnpm lint        # ESLint
+pnpm test        # Vitest test suite
+pnpm build       # production build
+```
 
-## Learn More
+## Content Authoring
 
-To learn more about Next.js, take a look at the following resources:
+Lessons live in `content/module-N/*.mdx`. See [`content/CLAUDE.md`](content/CLAUDE.md) for the authoring guide and [`docs/authoring-flow.md`](docs/authoring-flow.md) for the full content creation process.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Presentations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd presentations && bash build.sh
+```
 
-## Deploy on Vercel
+Slide decks are in `presentations/*.md` using [Marp](https://marp.app/). Exports to HTML, PDF, and PPTX.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Docker
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+docker compose up --build
+```
+
+Requires `ANTHROPIC_VERTEX_PROJECT_ID` and GCP credentials for the AI tutor.
+
+## Template Updates
+
+This repo is based on [learn-template](https://github.com/szaher/learn-template). To sync platform updates:
+
+```bash
+pnpm update:template -- --source /path/to/learn-template
+```
+
+See [`AGENTS.md`](AGENTS.md) for details on what's preserved during updates.
+
+## Tech Stack
+
+Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · MDX · Vitest · Marp
+
+## License
+
+This work is licensed under [CC-BY-4.0](./LICENSE). You are free to share and adapt the material with appropriate attribution. See [LICENSE](./LICENSE).

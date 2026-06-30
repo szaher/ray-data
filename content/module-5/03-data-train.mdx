@@ -37,7 +37,7 @@ In distributed training, each GPU worker needs a continuous stream of preprocess
     style W1 fill:#68d391,stroke:#68d391,color:#1a1d27
     style W2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style W3 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="CPU workers handle preprocessing and stream shards to GPU workers, preventing data loading bottlenecks" />
 
 ## Passing datasets to a trainer
 
@@ -108,6 +108,6 @@ def train_fn(config):
     style TR fill:#68d391,stroke:#68d391,color:#1a1d27
     style GPU1 fill:#68d391,stroke:#68d391,color:#1a1d27
     style GPU2 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Data flows from storage through distributed preprocessing into auto-sharded parallel GPU training" />
 
 Preprocessing runs on CPU workers throughout the Ray cluster while training runs on GPU workers. The two pipelines overlap via streaming, keeping GPUs fed without idle time.

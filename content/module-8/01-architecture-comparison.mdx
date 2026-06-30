@@ -50,7 +50,7 @@ Both frameworks follow a driver-worker pattern, but the internals diverge.
     style T4 fill:#242734,stroke:#fc8181,color:#e0e0e0
     style T5 fill:#242734,stroke:#fc8181,color:#e0e0e0
     style T6 fill:#242734,stroke:#fc8181,color:#e0e0e0
-`} />
+`} fallback="Spark delegates tasks through a JVM cluster manager to executor processes that run tasks as threads" />
 
 <MermaidDiagram chart={`graph TD
     subgraph "Ray Architecture"
@@ -79,7 +79,7 @@ Both frameworks follow a driver-worker pattern, but the internals diverge.
     style OS1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style OS2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style OS3 fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Ray uses Python-native workers with per-node shared object stores, eliminating JVM overhead" />
 
 Spark runs on the JVM. The driver creates a SparkContext that communicates with a cluster manager (YARN, Mesos, or Kubernetes) to launch executor JVM processes. Each executor runs tasks as threads within its JVM. This works well for JVM-native workloads but introduces overhead for Python: PySpark tasks must serialize data between the JVM and a Python subprocess via a socket.
 
@@ -107,7 +107,7 @@ This is the deepest architectural difference. It affects everything from latency
     style T4 fill:#68d391,stroke:#68d391,color:#1a1d27
     style T5 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style T6 fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Spark waits for all tasks in a stage before starting the next; Ray streams results between tasks immediately" />
 
 Spark's Catalyst optimizer analyzes your logical plan, applies optimization rules (predicate pushdown, column pruning, join reordering), and produces a physical plan divided into stages. Within a stage, tasks run in parallel. Between stages, a shuffle barrier forces all tasks to complete before the next stage begins. This simplifies fault tolerance (just replay a stage) but introduces latency and forces materialization of intermediate data.
 
@@ -154,7 +154,7 @@ Ray's shared-memory object store:
     style WP1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style WP2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style WP3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Ray workers share data via zero-copy memory-mapped access; Spark requires serialization across JVM and Python" />
 
 ## The optimizer question
 

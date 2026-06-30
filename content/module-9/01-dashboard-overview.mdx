@@ -73,7 +73,7 @@ The dashboard is a lightweight web server on the head node. It does not run your
     style R1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style R2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W1 fill:#242734,stroke:#b794f4,color:#e0e0e0
-    style W2 fill:#242734,stroke:#b794f4,color:#e0e0e0`} />
+    style W2 fill:#242734,stroke:#b794f4,color:#e0e0e0`} fallback="The dashboard reads all cluster state from a central metadata store (GCS) fed by every worker node" />
 
 Every raylet on every worker node continuously reports its status to the GCS: CPU usage, memory, running tasks, actor states. The dashboard reads this data and renders it in real time.
 

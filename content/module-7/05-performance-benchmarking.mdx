@@ -33,7 +33,7 @@ Optimizing without measurement is guesswork. Ray Data has built-in profiling too
     style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style C fill:#68d391,stroke:#68d391,color:#1a1d27
     style E fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Optimize iteratively: measure, find the bottleneck, tune, re-measure until performance is acceptable" />
 
 ## Profiling with ds.stats()
 
@@ -83,7 +83,7 @@ for bs in [1024, 4096, 8192]:
     style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style T fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style M fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Four key parameters — batch_size, concurrency, parallelism, and resource allocation — all drive throughput" />
 
 ## When to use Ray Data vs alternatives
 

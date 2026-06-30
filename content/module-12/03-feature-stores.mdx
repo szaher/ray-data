@@ -41,7 +41,7 @@ ML models need features at two moments: training (batch, historical data) and in
     style ON fill:#68d391,stroke:#68d391,color:#1a1d27
     style TRAIN fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style SERVE fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Ray Data computes features at scale, then a feature store splits them for batch training and real-time serving" />
 
 ## Computing features with Ray Data
 
@@ -143,7 +143,7 @@ online_features = store.get_online_features(
     style C fill:#68d391,stroke:#68d391,color:#1a1d27
     style E fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style G fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="A scheduled Ray Data job feeds both training and serving through offline-to-online materialization" />
 
 ## Key takeaways
 

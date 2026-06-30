@@ -301,6 +301,6 @@ Spark supports partitioned writes (partitionBy), multiple output formats (Delta,
     style D2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style F1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style P2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="PySpark optimizes declarative queries via Catalyst; Ray Data executes Python functions directly in a streaming task graph" />
 
 PySpark says: "Tell me what you want (declaratively), and I will figure out the best way to do it." Ray Data says: "Tell me what to do (functionally), and I will run it efficiently across the cluster." Both approaches have merit. Spark's declarative model is more forgiving of naive queries. Ray Data's functional model gives you more control and fits more naturally into ML workloads where the "transform" is a model inference call, not a SQL expression.

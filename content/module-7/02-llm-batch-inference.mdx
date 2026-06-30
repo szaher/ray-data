@@ -29,7 +29,7 @@ Running an LLM over millions of prompts fits Ray Data well. Each prompt is indep
     style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style C fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="LLM batch inference is a simple read-infer-write pipeline parallelized across GPU actors" />
 
 ## Approach 1: HuggingFace Transformers
 
@@ -87,6 +87,6 @@ ds.map_batches(VLLMPredictor, batch_size=256, concurrency=2, num_gpus=4)
     style A1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style A2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style OUT fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Ray splits prompts across multi-GPU actors that each use tensor parallelism for large models" />
 
 For batch size guidance: HuggingFace works best with 8-64 (memory-bound). vLLM handles 128-512 efficiently via internal continuous batching. Increase until GPU memory hits ~90%.

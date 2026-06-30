@@ -1,5 +1,6 @@
 ---
 title: "Object Store & Object Refs"
+description: "Distributed shared memory and zero-copy reads"
 quiz:
   - question: "What is the primary benefit of ray.put()?"
     options:
@@ -42,7 +43,7 @@ print(data.shape)    # (1000000,)
 
 ## How the object store works
 
-Each node runs an **object store** (built on Apache Arrow's Plasma). It uses shared memory so multiple worker processes on the same node can access the same data without copying it.
+Each node runs a **shared-memory object store**. It uses memory-mapped files so multiple worker processes on the same node can access the same data without copying it.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Node 1"
@@ -62,7 +63,7 @@ Each node runs an **object store** (built on Apache Arrow's Plasma). It uses sha
     style W3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W4 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W5 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Workers share objects via local shared memory; data only crosses the network when needed by a remote node" />
 
 ## ray.put(): explicit storage
 
@@ -80,11 +81,11 @@ big_ref = ray.put(big_array)
 refs = [process.remote(big_ref) for _ in range(100)]
 `} />
 
-For a 100 MB array sent to 100 tasks, this takes you from **10 GB** of serialization down to **100 MB**.
+For a 100 MB array sent to 100 tasks, `ray.put()` avoids serializing the array 100 times. The object is stored once in shared memory and each task receives a lightweight reference.
 
 ## Zero-copy reads
 
-When a worker on the same node needs an object, it reads directly from shared memory via memory mapping. No data is copied into the worker's heap. This is **zero-copy deserialization**, and it works with NumPy arrays and Arrow tables out of the box.
+When a worker on the same node needs an object, it can read directly from shared memory via memory mapping. For NumPy arrays, this is **zero-copy deserialization** — no data is copied into the worker's heap. Other Python objects, including Arrow tables, may require deserialization into the worker's process memory. See the [Ray objects documentation][ray-objects] for details on which types support zero-copy access.
 
 <MermaidDiagram chart={`graph LR
     subgraph "Same Node"
@@ -98,7 +99,7 @@ When a worker on the same node needs an object, it reads directly from shared me
     style T1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style T2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style T3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="ray.put stores data once in shared memory; co-located tasks read it via zero-copy mmap with no duplication" />
 
 ## Object lifetime and spilling
 
@@ -119,3 +120,7 @@ print(ray.cluster_resources())
 ## Best practices
 
 Use `ray.put()` when passing the same large object to many tasks. Pass `ObjectRef`s between tasks to build pipelines without pulling data to the driver. Avoid calling `ray.get()` too early; it blocks and defeats the purpose of async execution. Let Ray manage data locality as long as possible.
+
+> **Reference:** [Objects — Ray 2.55.1][ray-objects] (accessed June 2026)
+
+[ray-objects]: https://docs.ray.io/en/latest/ray-core/objects.html "Objects — Ray 2.55.1 (accessed June 2026)"

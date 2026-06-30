@@ -50,7 +50,7 @@ Ray Data pipelines run fine interactively, but production workloads need **sched
     style W2 fill:#242734,stroke:#f6ad55,color:#e0e0e0
     style W3 fill:#242734,stroke:#f6ad55,color:#e0e0e0
     style S3 fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
-`} />
+`} fallback="The orchestrator submits and monitors jobs while Ray clusters handle the actual distributed processing" />
 
 The orchestrator **does not run the data processing**. It submits the job to a Ray cluster and monitors its progress. This separation keeps your orchestrator lightweight and your data processing scalable.
 
@@ -343,7 +343,7 @@ def etl_pipeline():
     style B2 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
     style B3 fill:#68d391,stroke:#68d391,color:#1a1d27
     style B4 fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Choose long-lived clusters for frequent jobs with low latency, or per-job clusters to eliminate idle cost" />
 
 **Long-lived clusters** work best when you have frequent jobs and want to avoid startup latency. Use KubeRay with autoscaling to manage cost.
 

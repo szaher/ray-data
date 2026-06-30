@@ -36,7 +36,7 @@ Ray Data uses streaming execution by default. It pipelines operators so that rea
     style R2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style T2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style W2 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Streaming overlaps read, transform, and write in windows so the full dataset never needs to fit in memory" />
 
 ## How streaming works
 
@@ -65,7 +65,7 @@ When operators run at different speeds, Ray Data applies backpressure, slowing f
     style PREP fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style GPU fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style WRITE fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Backpressure slows fast upstream operators to match the slowest consumer, preventing unbounded memory growth" />
 
 ## Controlling execution
 

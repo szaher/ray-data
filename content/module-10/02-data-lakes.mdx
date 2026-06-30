@@ -51,7 +51,7 @@ Modern data architectures increasingly use **lakehouse** formats: open table for
     style P1 fill:#242734,stroke:#f6ad55,color:#e0e0e0
     style P2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style P3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Lakehouse formats add a metadata layer over Parquet files so Ray Data gets ACID transactions and time travel on cloud storage" />
 
 Both formats store the actual data as **Parquet files** in object storage. The table format adds a metadata layer on top that tracks which files belong to the current table version, column statistics, partition information, and the full history of changes.
 
@@ -197,7 +197,7 @@ Lakehouse formats store **partition metadata** and **column statistics** (min/ma
     style PRUNE fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
     style READ fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style PUSH fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Partition pruning and predicate pushdown skip irrelevant files and row groups, reading only the data that matches your filter" />
 
 <CodeBlock language="python" code={`import ray
 # Partition pruning: only read partitions matching the filter.

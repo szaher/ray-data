@@ -47,7 +47,7 @@ The execution timeline is a Gantt-chart view showing when each operator starts, 
     section Filter
         filter_invalid (24 blocks)   :f1, 10, 18
     section Write
-        write_parquet (24 blocks)    :w1, 14, 22`} />
+        write_parquet (24 blocks)    :w1, 14, 22`} fallback="Streaming execution overlaps operators so blocks flow through the pipeline without waiting for earlier stages to finish." />
 
 In streaming execution mode (the default for Ray Data), operators overlap. The Read operator does not need to finish all blocks before the Map operator starts consuming them. Blocks flow through the pipeline as they become available.
 
@@ -82,7 +82,7 @@ Three common bottleneck patterns show up clearly on the dashboard:
     style FIX1 fill:#68d391,stroke:#68d391,color:#1a1d27
     style FIX2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style FIX3 fill:#68d391,stroke:#68d391,color:#1a1d27
-    style OTHER fill:#f6e05e,stroke:#f6e05e,color:#1a1d27`} />
+    style OTHER fill:#f6e05e,stroke:#f6e05e,color:#1a1d27`} fallback="Diagnose slow pipelines by checking for a single slow operator, data skew, or cluster-wide resource contention." />
 
 ## Programmatic monitoring with stats()
 

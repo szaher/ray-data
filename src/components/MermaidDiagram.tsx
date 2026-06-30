@@ -110,10 +110,14 @@ export default function MermaidDiagram({ chart, fallback, children }: MermaidDia
     return () => { cancelled = true; };
   }, [chartText, id, theme]);
 
+  const accessibleLabel = fallback || "Mermaid diagram";
+
   return (
     <div className="my-6 p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border)] overflow-x-auto">
       {svgHtml ? (
-        <div className="mermaid flex justify-center" dangerouslySetInnerHTML={{ __html: svgHtml }} />
+        <div role="img" aria-label={accessibleLabel}>
+          <div className="mermaid flex justify-center" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svgHtml }} />
+        </div>
       ) : failed ? (
         <pre className="mermaid whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
           {fallback || chartText}

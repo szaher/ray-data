@@ -1,5 +1,6 @@
 ---
 title: "Performance & When to Choose"
+description: "Benchmarks, scaling characteristics, and decision framework"
 quiz:
   - question: "In which scenario does Ray Data typically outperform Spark?"
     options:
@@ -8,7 +9,7 @@ quiz:
       - "Multi-petabyte data warehouse queries with Catalyst optimization"
       - "Ad-hoc SQL analytics by a team of data analysts"
     correctIndex: 1
-    explanation: "Ray Data outperforms Spark in Python-heavy ML inference pipelines because workers are native Python processes with direct GPU access — there is no JVM-to-Python serialization overhead and no need to route data through a JVM bridge. Spark excels at the SQL-heavy scenarios due to Catalyst optimization and JVM-native execution."
+    explanation: "Ray Data outperforms Spark in Python-heavy ML inference pipelines because workers are native Python processes with direct GPU access — there is no JVM-Python bridge to cross. Data moves through the shared-memory object store rather than being serialized across language boundaries. Spark excels at the SQL-heavy scenarios due to Catalyst optimization and JVM-native execution."
   - question: "What is the recommended hybrid approach for organizations that need both Spark and Ray?"
     options:
       - "Run everything in Spark and ignore Ray"
@@ -29,9 +30,9 @@ Benchmarking Spark against Ray Data with a single number is misleading. Performa
 
 At this scale, framework overhead dominates actual computation time.
 
-Spark's JVM startup takes 5-15 seconds. Creating a SparkSession, launching executors, and initializing the Catalyst optimizer adds fixed overhead. For a 1 GB CSV read-filter-write pipeline, you might spend more time starting Spark than processing data.
+Spark's JVM startup typically takes 5-15 seconds. Creating a SparkSession, launching executors, and initializing the Catalyst optimizer adds fixed overhead. For a 1 GB CSV read-filter-write pipeline, you might spend more time starting Spark than processing data.
 
-Ray Data has Python-native startup (under 1 second for `ray.init()` on a local cluster). For small datasets, streaming execution avoids materializing the full dataset. A 1 GB pipeline can start producing output almost immediately.
+Ray Data has Python-native startup (typically under 1 second for `ray.init()` on a local cluster). For small datasets, streaming execution avoids materializing the full dataset. A 1 GB pipeline can start producing output almost immediately.
 
 For interactive work, prototyping, and small pipelines, Ray Data's lower startup overhead makes it feel significantly faster. For batch jobs where startup is amortized over hours of processing, this difference is irrelevant.
 
@@ -77,25 +78,25 @@ For shuffle-heavy workloads (big joins, full sorts), Spark is more mature. For s
     style R1 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R3 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Ray Data avoids the JVM-Python serialization bridge, running transforms directly in Python workers" />
 
 ### Serialization cost
 
-Every time data crosses the JVM-Python boundary in Spark, it is serialized via Apache Arrow. For a pipeline with multiple Python UDFs, this cost compounds. Spark mitigates this with Pandas UDFs (vectorized, Arrow-batched), but the crossing still happens.
+Traditional scalar Python UDFs in Spark use cloudpickle by default unless Arrow optimization is enabled; Pandas UDFs use Arrow for efficient batched transfer. Either way, data crosses the JVM-Python boundary, and for pipelines with many Python UDFs, this cost compounds.
 
-Ray Data has no serialization boundary for Python transforms. Data lives in Arrow format in the object store, and Python workers read it directly. The only serialization happens when data moves between nodes.
+Ray Data avoids the JVM-Python bridge entirely. Data is serialized into and out of the shared-memory object store in Arrow format, and Python workers read it directly. Serialization still happens when data moves between nodes, but there is no cross-language boundary within a single node.
 
 ### JVM garbage collection
 
 Spark executors are long-running JVM processes. As heap usage grows, the JVM garbage collector runs, and full GC pauses can stall an executor for seconds. This creates tail-latency issues: a single executor's GC pause can delay an entire stage. Tuning GC is an art (`-XX:+UseG1GC`, `-XX:ParallelGCThreads`, heap sizing).
 
-Ray workers are short-lived Python processes with no GC pauses. The object store uses reference counting and memory-mapped files.
+Ray workers are long-lived Python processes. Python has its own garbage collector, but it does not cause the same stop-the-world pauses as JVM full GC. The object store uses reference counting and memory-mapped files, keeping large data out of the Python heap.
 
 ### Task scheduling latency
 
 Spark schedules tasks at the stage level. A stage may contain thousands of tasks, but they are all planned at once. Individual task scheduling overhead is low (milliseconds).
 
-Ray schedules individual tasks with microsecond-level latency. This matters for fine-grained task graphs (many small tasks), but for bulk data processing with large blocks, both are fast enough.
+Ray typically schedules individual tasks with microsecond-level latency. This matters for fine-grained task graphs (many small tasks), but for bulk data processing with large blocks, both are fast enough.
 
 ## Spark strengths: where it wins
 
@@ -113,13 +114,13 @@ Ray schedules individual tasks with microsecond-level latency. This matters for 
 
 1. **Python-native ML integration.** Ray Data feeds directly into Ray Train, Ray Tune, and Ray Serve. Data processing, training, hyperparameter tuning, and model serving share one cluster and one API surface. No Parquet files needed as intermediate hand-off.
 
-2. **GPU workloads.** Ray workers bind directly to GPUs. Running a PyTorch model inside `map_batches` with `num_gpus=1` just works. Spark has no native GPU scheduling (Spark Rapids exists but adds complexity).
+2. **GPU workloads.** Ray workers bind directly to GPUs. Running a PyTorch model inside `map_batches` with `num_gpus=1` just works. Spark supports executor- and task-level GPU resource requests via `ResourceProfiles` since Spark 3.1, but the integration adds configuration complexity compared to Ray's native approach.
 
-3. **Heterogeneous resources.** Different stages of a Ray Data pipeline can request different resources. Image decoding needs CPUs, model inference needs GPUs, post-processing needs CPUs again. Ray handles this naturally. Spark executors have fixed resource profiles.
+3. **Heterogeneous resources.** Different stages of a Ray Data pipeline can request different resources. Image decoding needs CPUs, model inference needs GPUs, post-processing needs CPUs again. Ray handles this naturally. Spark supports `ResourceProfiles` and Dynamic Resource Allocation, but mixing resource types across stages requires more explicit configuration.
 
 4. **Streaming execution.** Ray Data processes blocks through the pipeline incrementally. A 500 GB read-transform-write pipeline may only need 10 GB of memory because it never materializes the full dataset at once. Spark stages force materialization at shuffle boundaries.
 
-5. **Low overhead for Python.** No JVM. No serialization bridge. No GC pauses. For workloads that are fundamentally Python functions on data, Ray Data removes an entire layer of overhead.
+5. **Low overhead for Python.** No JVM, no JVM-Python serialization bridge, and no JVM full-GC pauses. For workloads that are fundamentally Python functions on data, Ray Data removes the cross-language overhead layer.
 
 ## The hybrid approach
 
@@ -151,7 +152,7 @@ For many organizations, the right answer is not "Spark or Ray" but "Spark and Ra
     style R3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R5 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Use Spark for SQL ETL and data governance, then hand off via Parquet to Ray for ML training and serving" />
 
 This pattern is increasingly common in production ML systems:
 
@@ -180,7 +181,7 @@ This pattern is increasingly common in production ML systems:
     style RAY fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style HYBRID fill:#68d391,stroke:#68d391,color:#1a1d27
     style NOTE1 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Choose Spark for SQL analytics, Ray for GPU ML pipelines, or both when your workflow spans ETL and ML" />
 
 ### Choose Spark when:
 - Your workload is primarily SQL with complex joins and aggregations
@@ -217,3 +218,7 @@ Spark executors hold fixed resources for the duration of a job. Ray's task-based
 On ecosystem lock-in: Spark runs on any Hadoop-compatible cluster and has multiple managed options. Ray's managed options are growing (Anyscale) but the ecosystem is younger.
 
 The best choice depends on your specific workload, team, and infrastructure. Both frameworks are excellent. They just optimize for different things. Understanding their strengths lets you pick the right tool, or combine them, for your situation.
+
+[pyspark-udf]: https://spark.apache.org/docs/latest/api/python/user_guide/udfandudtf.html "Unleashing UDFs & UDTFs — PySpark 4.1.2 (accessed June 2026)"
+[spark-config]: https://spark.apache.org/docs/latest/configuration.html "Spark Configuration — Spark 4.1.2 (accessed June 2026)"
+[ray-objects]: https://docs.ray.io/en/latest/ray-core/objects.html "Ray Objects — Ray 2.55.1 (accessed June 2026)"

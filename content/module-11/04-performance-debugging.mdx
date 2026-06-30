@@ -35,7 +35,7 @@ There is a systematic way to find and fix pipeline bottlenecks. Follow these fou
     style S2 fill:#b794f4,stroke:#b794f4,color:#1a1d27
     style S3 fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
     style S4 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Debug slow pipelines in four steps: profile with ds.stats(), check parallelism, check data skew, then check I/O." />
 
 ---
 
@@ -150,7 +150,7 @@ ds = ds.repartition(100)`} language="python" filename="check_skew.py" />
     style E3 fill:#68d391,stroke:#68d391,color:#1a1d27
     style E4 fill:#68d391,stroke:#68d391,color:#1a1d27
     style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Repartitioning redistributes unevenly sized blocks into equal chunks so no single straggler slows the pipeline." />
 
 ---
 
@@ -226,7 +226,7 @@ ds_fast2 = ds.map_batches(normalize_pandas, batch_format="pandas", batch_size=40
     style S2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style B fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style NP fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="map_batches() with vectorized ops processes batches 100x faster than map() processing rows one at a time." />
 
 ---
 
@@ -320,7 +320,7 @@ ds = ds.map_batches(timed_process, batch_size=512)`} language="python" filename=
     style BALANCE fill:#68d391,stroke:#68d391,color:#1a1d27
     style PROFILE fill:#68d391,stroke:#68d391,color:#1a1d27
     style STATS fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Use ds.stats() to find the bottleneck, then fix it: switch to vectorized ops, add parallelism, or rebalance data." />
 
 The most common performance wins, in order of likelihood:
 

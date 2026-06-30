@@ -77,7 +77,7 @@ Start by understanding how Spark concepts map to Ray Data.
     style E2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style F2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style G2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Every core Spark concept has a Ray Data equivalent, except the Catalyst optimizer which requires manual optimization" />
 
 | Spark Concept | Ray Data Equivalent | Notes |
 |---|---|---|
@@ -118,7 +118,7 @@ Start by understanding how Spark concepts map to Ray Data.
     style S9 fill:#ed8936,stroke:#ed8936,color:#1a1d27
     style S10 fill:#68d391,stroke:#68d391,color:#1a1d27
     style S11 fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Classify each pipeline stage, keep SQL-heavy parts in Spark, convert the rest to Ray Data, then benchmark and iterate" />
 
 ## Pattern 1: simple read-transform-write
 
@@ -333,7 +333,7 @@ Spark DataFrames have strict schemas. If a column is declared as `IntegerType`, 
     style Q3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style Q4 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style Q5 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Migrate to Ray Data when workloads are Python/GPU/ML-heavy; keep Spark for SQL-heavy pipelines or use a hybrid approach" />
 
 ## What changes, what stays
 

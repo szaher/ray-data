@@ -75,7 +75,7 @@ The only differences: `@ray.remote` decorator, `.remote()` to call, `ray.get()` 
     O2 <-->|"Transfer large objects"| O3
     style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style H fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
-`} />
+`} fallback="Ray's driver submits tasks to a head node that schedules them across workers, each with shared-memory object stores for zero-copy data access." />
 
 ## The key components
 

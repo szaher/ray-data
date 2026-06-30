@@ -14,7 +14,7 @@
         "architecture"
       ],
       "hasCode": true,
-      "hasQuiz": false
+      "hasQuiz": true
     },
     {
       "slug": "02-llm-batch-inference",
@@ -26,7 +26,7 @@
         "resource"
       ],
       "hasCode": true,
-      "hasQuiz": false
+      "hasQuiz": true
     },
     {
       "slug": "03-etl-pipeline",
@@ -38,7 +38,7 @@
         "data-flow"
       ],
       "hasCode": true,
-      "hasQuiz": false
+      "hasQuiz": true
     },
     {
       "slug": "04-serve-online",
@@ -50,7 +50,7 @@
         "pipeline"
       ],
       "hasCode": true,
-      "hasQuiz": false
+      "hasQuiz": true
     },
     {
       "slug": "05-performance-benchmarking",
@@ -62,7 +62,7 @@
         "comparison"
       ],
       "hasCode": true,
-      "hasQuiz": false
+      "hasQuiz": true
     }
   ]
 }

@@ -36,7 +36,7 @@ A common production pitfall is training-serving skew: the model was trained with
     style MODEL1 fill:#68d391,stroke:#68d391,color:#1a1d27
     style MODEL2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style RESP fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
-`} />
+`} fallback="Reusing the same Ray Data preprocessor in training and serving prevents training-serving skew" />
 
 ## A basic Ray Serve deployment
 
@@ -117,6 +117,6 @@ serve.run(app)`} />
     style P2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style M1 fill:#68d391,stroke:#68d391,color:#1a1d27
     style M2 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Ray Serve independently scales CPU preprocessing and GPU inference replicas based on load" />
 
 CPU-bound preprocessing scales on cheap CPU replicas while GPU inference runs on dedicated GPU replicas. Ray Serve autoscales each stage independently based on load.

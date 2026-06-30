@@ -1,5 +1,6 @@
 ---
 title: "Fault Tolerance & Lineage"
+description: "Task retries and object reconstruction"
 quiz:
   - question: "How does Ray Data recover from a worker failure during a map_batches operation?"
     options:
@@ -8,7 +9,7 @@ quiz:
       - "It loads the result from a checkpoint file"
       - "It skips the failed blocks and continues"
     correctIndex: 1
-    explanation: "Ray Data tracks the lineage of each block — which input blocks and operators produced it. When a task fails, Ray retries just that task by recomputing or re-reading its input blocks, not the entire pipeline."
+    explanation: "Ray Data tracks the lineage of each block — which input blocks and operators produced it. When a worker process or node dies, Ray retries just that task (up to three times by default) by recomputing or re-reading its input blocks. Application exceptions are not retried unless retry_exceptions is explicitly enabled."
   - question: "What is the purpose of calling ds.materialize() for fault tolerance?"
     options:
       - "It converts the dataset to a pandas DataFrame"
@@ -36,25 +37,26 @@ When processing terabytes across dozens of machines, node failures, preemptions,
     style R fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Ray retries only the failed task by re-reading its input block, not restarting the entire job" />
 
 ## Block-level retries
 
-Ray Data retries at the task level, not the job level. Each task processes one or more blocks. When a task fails (worker crash, OOM, application error), the executor retries just that task on a different worker.
+Ray Data retries at the task level, not the job level. Each task processes one or more blocks. By default, Ray retries a task up to three times when its worker process or node dies. Application exceptions are **not** retried unless you explicitly enable `retry_exceptions`.
 
 <CodeBlock language="python" code={`import ray
+from ray.data import ActorPoolStrategy
 
-ctx = ray.data.DataContext.get_current()
+ds = ray.data.read_parquet("s3://bucket/data/")
 
-# Configure max retries per task (default is 3)
-ctx.max_task_retries = 5
+# Default: retries worker/node crashes up to 3 times.
+# Application exceptions are NOT retried.
+ds = ds.map_batches(stable_transform, batch_size=1024)
 
-# Application-level exceptions can also trigger retries
-ds = ray.data.read_parquet("s3://bucket/data/").map_batches(
+# To also retry application exceptions, pass ray_remote_args:
+ds = ds.map_batches(
     flaky_transform,
     batch_size=1024,
-    # Ray retries this task up to max_task_retries times
-    # if the worker crashes or raises an exception
+    ray_remote_args={"max_retries": 5, "retry_exceptions": True},
 )`} />
 
 ## Lineage reconstruction
@@ -71,7 +73,7 @@ When a worker holding computed blocks dies, those blocks are lost from the objec
     style B1R fill:#68d391,stroke:#68d391,color:#1a1d27
     style B2R fill:#68d391,stroke:#68d391,color:#1a1d27
     style SRC fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Ray reconstructs lost blocks by replaying the recorded lineage chain from durable sources" />
 
 ## Checkpointing with materialize()
 
@@ -97,16 +99,6 @@ ds = ds.map_batches(expensive_inference)  # failure only re-runs this`} />
 
 <CodeBlock language="python" code={`import ray
 
-ctx = ray.data.DataContext.get_current()
-
-# Number of times to retry failed tasks
-ctx.max_task_retries = 3
-
-# For spot instances: enable Ray's built-in node fault tolerance
-ray.init(
-    runtime_env={"env_vars": {"RAY_BACKEND_LOG_LEVEL": "info"}},
-)
-
 # Write intermediate results to durable storage for long jobs
 ds = ray.data.read_parquet("s3://input/")
 ds = ds.map_batches(stage_1)
@@ -119,7 +111,11 @@ ds.write_parquet("s3://output/")`} />
 
 ## Best practices
 
-- Keep transforms idempotent. Retries re-execute your function, so avoid side effects that can't be repeated safely.
-- Checkpoint before expensive stages. Use `materialize()` or write to durable storage to limit recomputation.
-- Use durable sources. Lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
-- Monitor retries. Excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.
+- **Understand retry defaults.** By default, Ray retries a task up to three times when its worker process or node dies. Set `max_retries` in `ray_remote_args` to override that limit. Application exceptions are not retried unless `retry_exceptions` is enabled.
+- **Keep transforms idempotent.** Retries re-execute your function, so avoid side effects that can't be repeated safely.
+- **Checkpoint before expensive stages.** Use `materialize()` or write to durable storage to limit recomputation.
+- **Use durable sources.** Lineage reconstruction re-reads inputs, so sources like S3 or GCS are safer than ephemeral streams.
+- **Monitor retries.** Excessive retries signal a deeper problem (OOM, bad data) rather than transient failures.
+
+[ray-ft]: https://docs.ray.io/en/latest/ray-core/fault_tolerance/tasks.html "Task Fault Tolerance — Ray 2.55.1 (accessed June 2026)"
+[ray-node-ft]: https://docs.ray.io/en/latest/ray-core/fault_tolerance/nodes.html "Node Fault Tolerance — Ray 2.55.1 (accessed June 2026)"

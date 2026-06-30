@@ -31,7 +31,7 @@ Images are independent of each other, processing them is compute-heavy, and thro
     style B fill:#68d391,stroke:#68d391,color:#1a1d27
     style C fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style D fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="An image pipeline stages read, CPU preprocessing, GPU classification, and parquet write in sequence" />
 
 ## Step 1: read and transform
 
@@ -93,6 +93,6 @@ ds.write_parquet("s3://my-bucket/results/")
     style G1 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style G2 fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style W fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="CPU workers preprocess images, then fan out to multiple GPU actors for parallel inference" />
 
 `read_images` handles decoding. CPU transforms run on many workers automatically. The GPU stage uses a class-based callable so the model loads once, and `concurrency=2` runs two GPU actors in parallel.

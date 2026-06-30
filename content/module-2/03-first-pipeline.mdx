@@ -1,5 +1,6 @@
 ---
 title: "Your First Data Pipeline"
+description: "Read, transform, and write data with Ray Data in 10 lines"
 quiz:
   - question: "When does a Ray Data pipeline actually execute its transformations?"
     options:
@@ -117,7 +118,7 @@ ds.write_csv("/tmp/output_csv/")
 # Write to JSON
 ds.write_json("/tmp/output_json/")`} language="python" filename="write_data.py" />
 
-Ray Data writes one file per block, so the output directory will contain multiple files. This is normal for distributed systems. Each worker writes its own partition.
+Ray Data commonly writes a directory of output files. The file count depends on the number of dataset blocks and writer configuration. This is normal for distributed systems — inspect the output directory to see the actual layout.
 
 ## How the pipeline flows
 
@@ -140,7 +141,7 @@ Here is what happens when the pipeline executes:
     style F fill:#f6ad55,stroke:#f6ad55,color:#1a1d27
     style S fill:#b794f4,stroke:#b794f4,color:#1a1d27
     style W fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Data flows through read, map, filter, select, and write stages as a streaming pipeline" />
 
 Data flows left to right, one block at a time. While block 1 is being filtered, block 2 can still be in the map stage. This **pipelining** keeps all your CPU cores busy.
 
@@ -196,4 +197,4 @@ ds.write_parquet("/tmp/iris_filtered")
 # 8. Clean up
 ray.shutdown()`} language="python" filename="full_pipeline.py" />
 
-You've just built a distributed data pipeline. The same code works on your laptop with 8 cores and on a 100-node cluster with 6,400 cores, no changes needed.
+You've just built a distributed data pipeline. The same transformation logic runs on your laptop and on a cluster. Cluster deployment also requires compatible dependencies, storage access, credentials, and resource configuration — but the data processing code itself stays the same.

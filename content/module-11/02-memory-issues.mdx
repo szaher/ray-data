@@ -48,7 +48,7 @@ Ray divides each node's memory into distinct regions, and each region can indepe
     style W3 fill:#b794f4,stroke:#b794f4,color:#1a1d27
     style OS fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style GCS fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Ray splits each node's memory into object store, worker heaps, and system regions — each can independently cause OOM." />
 
 Three types of memory can cause OOM:
 
@@ -108,7 +108,7 @@ Different symptoms point to different root causes:
     style C2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style C3 fill:#68d391,stroke:#68d391,color:#1a1d27
     style C4 fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Each OOM symptom points to a specific root cause and fix: killed workers, retries, slowdowns, and crashes each need different remedies." />
 
 ---
 

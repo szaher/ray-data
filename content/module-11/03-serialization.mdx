@@ -36,7 +36,7 @@ When you call `ds.map(my_function)`, Ray needs to send `my_function` to every wo
     W2->>W2: pickle.loads(bytes) → function
     W1->>W1: function(data_block_1)
     W2->>W2: function(data_block_2)
-`} />
+`} fallback="Ray serializes functions to bytes in the driver, sends them through the object store, and deserializes on each worker" />
 
 Ray uses **cloudpickle** (an enhanced version of Python's pickle) and **Apache Arrow** for tabular data. But not everything can be pickled.
 
@@ -140,7 +140,7 @@ When you have a large read-only object (like a lookup table or model weights) th
     style W2a fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W3a fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W4a fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Without ray.put(), large objects are redundantly serialized and sent to every worker" />
 
 <MermaidDiagram chart={`flowchart LR
     subgraph "With ray.put()"
@@ -156,7 +156,7 @@ When you have a large read-only object (like a lookup table or model weights) th
     style W2b fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W3b fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W4b fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="ray.put() stores data once in shared memory so workers read it with zero-copy access" />
 
 <CodeBlock code={`import ray
 import numpy as np
@@ -249,7 +249,7 @@ ds = ds.map_batches(
     style A2 fill:#b794f4,stroke:#b794f4,color:#1a1d27
     style A3 fill:#b794f4,stroke:#b794f4,color:#1a1d27
     style A4 fill:#b794f4,stroke:#b794f4,color:#1a1d27
-`} />
+`} fallback="Actor pools load expensive resources once per worker, then reuse them across many batches" />
 
 ---
 
@@ -271,4 +271,4 @@ Use this flowchart when you hit a serialization error:
     style F fill:#68d391,stroke:#68d391,color:#1a1d27
     style G fill:#68d391,stroke:#68d391,color:#1a1d27
     style H fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Use class-based transforms for connections and models, ray.put() for large data, named functions for lambdas" />

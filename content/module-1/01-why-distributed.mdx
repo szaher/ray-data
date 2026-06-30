@@ -1,5 +1,6 @@
 ---
 title: "Why Distributed Computing?"
+description: "Single-machine limits, data growth, and compute needs"
 quiz:
   - question: "What is the main reason we need distributed computing?"
     options:
@@ -38,7 +39,7 @@ Distributed computing solves this: **when your data or computation exceeds what 
     style A fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style B fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style C fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="A 1 TB dataset cannot fit into a single machine's 16 GB RAM, making processing impossible." />
 
 ## The solution: use more machines
 
@@ -57,23 +58,23 @@ Instead of one machine with 16 GB, use **64 machines** with 16 GB each. Now you 
     C --> R[Final Result]
     style D fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style R fill:#68d391,stroke:#68d391,color:#1a1d27
-`} />
+`} fallback="Splitting 1 TB across 64 machines lets each handle 16 GB, enabling parallel processing." />
 
 ## Three reasons you need distribution
 
 **1. Data doesn't fit in memory.** Your dataset is larger than any single machine's RAM, so you spread it across many machines.
 
-**2. Computation takes too long.** Processing 1 TB on 4 cores might take 10 hours. On 256 cores across 64 machines, it takes roughly 10 minutes.
+**2. Computation takes too long.** For embarrassingly parallel workloads with minimal coordination, distributing work across many machines can dramatically reduce elapsed time — but the actual speedup depends on I/O bottlenecks, data skew, network overhead, and coordination costs.
 
-**3. Fault tolerance.** If one machine dies, you don't lose everything. The work can be redistributed.
+**3. Fault tolerance.** If one machine dies, the system can recover. Depending on task retry settings and input durability, some or all of the lost work can be reconstructed rather than restarted from scratch.
 
 ## The challenge
 
 Distributed computing sounds simple: just split the work. But it introduces hard problems:
 
 - How do you split the data? Not all splits are equal.
-- How do machines communicate? Network is 1000x slower than memory.
+- How do machines communicate? Network transfers are typically much slower and more variable than local memory access.
 - What happens when a machine fails mid-computation?
 - How do you collect results? Some operations (like sorting) need coordination.
 
-Frameworks like **Ray** solve these problems for you. Instead of managing machines, networks, and failures yourself, you write Python code and Ray handles the distribution.
+Frameworks like **Ray** handle many of these problems for you. Instead of managing machines, networks, and failures yourself, you write Python code and Ray manages the distribution.

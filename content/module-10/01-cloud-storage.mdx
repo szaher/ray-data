@@ -47,7 +47,7 @@ Most production Ray Data pipelines read from cloud object stores. Ray Data uses 
     style W2 fill:#242734,stroke:#f6ad55,color:#e0e0e0
     style W3 fill:#242734,stroke:#68d391,color:#e0e0e0
     style W4 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Ray workers read directly from S3, GCS, or Azure in parallel, scaling throughput with the cluster" />
 
 Each worker reads its assigned file partitions **directly** from the object store. The driver only coordinates which files go where, so read throughput scales linearly with the number of workers.
 

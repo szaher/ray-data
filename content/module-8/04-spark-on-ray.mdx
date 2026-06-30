@@ -61,7 +61,7 @@ RayDP is a thin integration layer that:
     style RW2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style RW3 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style SD fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="RayDP runs Spark executors as Ray actors so Spark SQL and Ray ML share one cluster without separate infrastructure" />
 
 ## Installation
 
@@ -276,7 +276,7 @@ print(f"Final loss: {result.metrics['loss']:.4f}")
     style JVM1 fill:#242734,stroke:#fc8181,color:#e0e0e0
     style JVM2 fill:#242734,stroke:#fc8181,color:#e0e0e0
     style JVM3 fill:#242734,stroke:#fc8181,color:#e0e0e0
-`} />
+`} fallback="RayDP replaces Spark's cluster manager with Ray actors and uses Arrow for zero-copy data transfer to Ray Datasets" />
 
 RayDP implements a custom `ExternalClusterManager` for Spark. When Spark requests executors, RayDP creates Ray actors instead of launching standalone JVM processes. Each Ray actor runs a JVM inside it. Spark's execution engine (Catalyst, Tungsten, shuffle) works exactly as it does on YARN or Kubernetes, but resource allocation and scheduling are managed by Ray.
 

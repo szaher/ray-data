@@ -42,7 +42,7 @@ Ray Data connects your data pipeline to your ML framework. Instead of materializ
     style TF fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style HF fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style INF fill:#d6bcfa,stroke:#d6bcfa,color:#1a1d27
-`} />
+`} fallback="Ray Dataset acts as a universal adapter, streaming data from any source directly into PyTorch, TensorFlow, or HuggingFace without intermediate files." />
 
 ## Ray Data to PyTorch
 
@@ -228,7 +228,7 @@ For distributed training, Ray Train accepts Ray Datasets directly. The `Trainer`
     style TW1 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
     style TW2 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
     style TW3 fill:#242734,stroke:#d6bcfa,color:#e0e0e0
-`} />
+`} fallback="Ray Train automatically shards a Ray Dataset across GPU workers, so each worker trains on its own slice without manual data splitting." />
 
 <CodeBlock language="python" code={`import ray
 from ray.train.torch import TorchTrainer

@@ -74,7 +74,7 @@ For production monitoring, scrape Ray's metrics into Prometheus and visualize th
     style W2 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style PROM fill:#f6e05e,stroke:#f6e05e,color:#1a1d27
     style GRAF fill:#68d391,stroke:#68d391,color:#1a1d27
-    style ALERT fill:#fc8181,stroke:#fc8181,color:#1a1d27`} />
+    style ALERT fill:#fc8181,stroke:#fc8181,color:#1a1d27`} fallback="Prometheus scrapes metrics from every Ray node and feeds Grafana for dashboards and alerting" />
 
 Configure Prometheus to scrape all Ray nodes by adding them to `prometheus.yml`:
 
@@ -219,7 +219,7 @@ A production observability setup for Ray Data pipelines combines three layers:
     style LOGAGG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style PROM fill:#68d391,stroke:#68d391,color:#1a1d27
     style GRAF fill:#68d391,stroke:#68d391,color:#1a1d27
-    style ELASTIC fill:#68d391,stroke:#68d391,color:#1a1d27`} />
+    style ELASTIC fill:#68d391,stroke:#68d391,color:#1a1d27`} fallback="Production observability layers custom app metrics, Ray built-in metrics, and infrastructure tools into one stack" />
 
 **Layer 1, Application.** Your pipeline code emits custom metrics for business-level KPIs (rows processed, error rates, latency) and structured logs for debugging.
 

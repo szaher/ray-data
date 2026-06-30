@@ -1,5 +1,6 @@
 ---
 title: "GPU Batch Inference"
+description: "map_batches with num_gpus and actor pools"
 quiz:
   - question: "What is the primary purpose of ActorPoolStrategy in Ray Data?"
     options:
@@ -37,7 +38,7 @@ Running a model on millions of inputs means solving two problems: loading the mo
     style G2 fill:#68d391,stroke:#68d391,color:#1a1d27
     style R1 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
     style R2 fill:#e0e0e0,stroke:#e0e0e0,color:#1a1d27
-`} />
+`} fallback="GPU actors load the model once and reuse it across many batches, avoiding expensive reloads" />
 
 ## Model loading with a callable class
 
@@ -66,6 +67,8 @@ class ImageClassifier:
 
 `ActorPoolStrategy` tells Ray to create a fixed pool of GPU actors. Each actor loads the model once and then processes many batches over its lifetime.
 
+> **Prerequisites:** This example assumes a cluster with at least 4 GPUs, pre-downloaded model weights (ResNet is downloaded automatically by torchvision), and access to the S3 bucket. Adjust `size` to match your available GPUs. On a CPU-only machine, remove `num_gpus=1` and reduce pool size to test the pattern without GPUs.
+
 <CodeBlock language="python" code={`ds = ray.data.read_images("s3://my-bucket/images/")
 
 predictions = ds.map_batches(
@@ -79,7 +82,7 @@ predictions.write_parquet("s3://my-bucket/results/")`} />
 
 ## Tuning batch size
 
-Choose `batch_size` based on GPU memory. Too small wastes GPU cycles. Too large causes out-of-memory errors.
+Choose `batch_size` based on your GPU memory, model size, and input resolution. Too small wastes GPU cycles. Too large causes out-of-memory errors. The values below are a common starting point for image classification — optimal sizes depend on your specific model, precision, and hardware.
 
 <MermaidDiagram chart={`graph TD
     subgraph "Batch Size Tradeoffs"
@@ -89,6 +92,6 @@ Choose `batch_size` based on GPU memory. Too small wastes GPU cycles. Too large 
     style SM fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style MED fill:#68d391,stroke:#68d391,color:#1a1d27
     style LG fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Start with batch_size=256 and increase toward GPU memory limits for best throughput" />
 
 A reasonable starting point is `batch_size=256`. Monitor GPU memory with `nvidia-smi` and increase until you approach 80% memory usage.

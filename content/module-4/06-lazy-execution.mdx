@@ -1,5 +1,6 @@
 ---
 title: "Lazy Execution & Materialization"
+description: "Deferred execution and when it actually runs"
 quiz:
   - question: "When does Ray Data actually execute transformations?"
     options:
@@ -33,7 +34,7 @@ When you chain transformations in Ray Data, **nothing executes**. Each call to `
     style F fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style A fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style C fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Transformations are deferred until a consuming action like show() or write_parquet() triggers execution." />
 
 ## Why lazy execution?
 
@@ -111,5 +112,5 @@ for epoch in range(10):
 
 # Good use of streaming: one-shot batch inference
 ds = ray.data.read_images("s3://bucket/images/")
-ds = ds.map_batches(Predictor, num_gpus=1, concurrency=2)
+ds = ds.map_batches(Predictor, num_gpus=1, compute=ray.data.ActorPoolStrategy(size=2))
 ds.write_parquet("s3://bucket/predictions/")  # stream through, no materialize needed`} />

@@ -58,7 +58,7 @@ In production, you connect to a **remote cluster**, where multiple machines are 
     style W1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style W3 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="Local mode runs everything on one machine; cluster mode distributes work across a head node and multiple workers" />
 
 ## Anatomy of a Ray cluster
 
@@ -86,7 +86,7 @@ The **head node** runs the Global Control Store (GCS), the dashboard, and the au
     style DB fill:#68d391,stroke:#68d391,color:#1a1d27
     style R1 fill:#242734,stroke:#63b3ed,color:#e0e0e0
     style R2 fill:#242734,stroke:#63b3ed,color:#e0e0e0
-`} />
+`} fallback="The GCS on the head node coordinates workers via gRPC while object stores share data across nodes" />
 
 ## The Ray dashboard
 

@@ -45,7 +45,7 @@ result = ray.get(ref)           # Blocks until done → 16
 
 When you call `.remote()`, three things happen: the function and its arguments are serialized, the task is scheduled onto an available worker, and an `ObjectRef` is returned immediately. Your driver script keeps running. It does not wait.
 
-<MermaidDiagram chart={`graph LR
+<MermaidDiagram fallback="Calling .remote() returns immediately; workers execute in parallel and deposit results in the Object Store for later retrieval" chart={`graph LR
     D[Driver Process] -->|".remote(4)"| S[Scheduler]
     S -->|assign| W1[Worker 1]
     S -->|assign| W2[Worker 2]

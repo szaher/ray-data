@@ -288,7 +288,7 @@ async function validateMdx(file, knownCitationIds) {
     if (!/\stitle=["'][^"']+["']/.test(match[0])) add("error", file, "Embedded frame is missing a title.");
   }
 
-  for (const match of findAll(/<Diagram\b/g, body)) {
+  for (const match of findAll(/<(?:Diagram|MermaidDiagram)\b/g, body)) {
     const nextComponent = body.slice(match.index + 1).search(/\n\s*<[A-Z/]/);
     const end = nextComponent === -1 ? body.length : match.index + 1 + nextComponent;
     const componentSource = body.slice(match.index, end);

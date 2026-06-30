@@ -40,7 +40,7 @@ Traditional batch pipelines read all data, process it, then write results. Strea
     style S4 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style S5 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style S6 fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
-`} />
+`} fallback="Streaming processes data block-by-block so the full dataset never needs to fit in memory" />
 
 ## Streaming execution in Ray Data
 
@@ -107,7 +107,7 @@ Ray Data automatically applies backpressure when downstream operators are slower
     style M fill:#63b3ed,stroke:#63b3ed,color:#1a1d27
     style W fill:#68d391,stroke:#68d391,color:#1a1d27
     style BP fill:#242734,stroke:#e0e0e0,color:#e0e0e0
-`} />
+`} fallback="Backpressure automatically slows fast producers to match the slowest operator, preventing memory overload" />
 
 <CodeBlock language="python" code={`import ray
 

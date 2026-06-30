@@ -39,7 +39,7 @@ Python has a **Global Interpreter Lock (GIL)**, a mutex that allows only one thr
     end
     style GIL fill:#fc8181,stroke:#fc8181,color:#1a1d27
     style C1B fill:#ecc94b,stroke:#ecc94b,color:#1a1d27
-`} />
+`} fallback="The GIL forces all Python threads through a single lock, so only one core runs Python code regardless of thread count." />
 
 ## The multiprocessing workaround
 
@@ -57,7 +57,7 @@ You've spent 4.5 seconds and doubled your memory usage just to *move* the data.
     P1[Process 1\n1 GB DataFrame] -->|"pickle\n~2s"| B[Bytes\n1 GB copy]
     B -->|"copy\n~0.5s"| P2[Process 2\nunpickle ~2s]
     style B fill:#fc8181,stroke:#fc8181,color:#1a1d27
-`} />
+`} fallback="Multiprocessing requires costly serialization and copying, doubling memory and adding seconds of overhead per transfer." />
 
 ## What Ray does differently
 

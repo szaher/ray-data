@@ -104,6 +104,7 @@ class ModelPredictor:
             inputs = torch.tensor(batch["input"]).to(self.device)
             preds = self.model(inputs).cpu().numpy()
         return {"pred": preds}
+# gpu-resource-reference: omit num_gpus for CPU-only use
 ds = ds.map_batches(ModelPredictor, compute=ray.data.ActorPoolStrategy(size=2), num_gpus=1, batch_size=256)`} language="python" filename="fix_model.py" />
 
 ### Pattern 3: file handles and clients
@@ -226,6 +227,7 @@ ds = ds.map_batches(
     ExpensiveTransform,
     compute=ray.data.ActorPoolStrategy(size=4),
     batch_size=256,
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,       # each actor gets 1 GPU
 )`} language="python" filename="actor_pool.py" />
 

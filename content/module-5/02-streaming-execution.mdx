@@ -49,10 +49,16 @@ Ray Data divides data into blocks and pipelines them through operators. While bl
 ds = ray.data.read_parquet("s3://bucket/terabyte-dataset/")
 
 ds = ds.map_batches(preprocess, batch_size=4096)
+# gpu-example: streaming-model
 ds = ds.map_batches(run_model, batch_size=512, num_gpus=1)
 
 # Data flows through read -> preprocess -> model -> write
 ds.write_parquet("s3://bucket/output/")`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: streaming-model
+ds = ds.map_batches(run_model, batch_size=128)`} />
 
 ## Backpressure and flow control
 

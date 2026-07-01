@@ -9,7 +9,7 @@ quiz:
       - "PySpark can only filter numeric columns"
       - "There is no difference — both use identical filter syntax"
     correctIndex: 0
-    explanation: "PySpark's filter accepts Column expressions (like col('age') > 30) or SQL strings that Catalyst can optimize — for example, pushing the predicate down into the Parquet reader. Ray Data's filter takes a Python callable applied per row or batch, which is flexible but opaque to the optimizer."
+    explanation: "PySpark's filter accepts Column expressions (like col('age') > 30) or SQL strings that Catalyst can optimize — for example, pushing compatible predicates into the Parquet reader. Ray Data's filter takes a Python callable applied per row or batch, which is flexible but opaque to the optimizer. Ray Data also supports predicate expressions with Parquet filter pushdown for non-callable filters."
   - question: "How do GroupBy aggregations differ between PySpark and Ray Data?"
     options:
       - "PySpark supports groupby, Ray Data does not"
@@ -73,13 +73,11 @@ result = df.select(col("name"), upper(col("city")).alias("city_upper"))
 <CodeBlock language="python" filename="ray_data_select.py" code={`# Ray Data: select via map_batches with column indexing
 result = ds.select_columns(["name", "age"])
 # With expressions — use map_batches on Arrow tables
-result = ds.map_batches(
-    lambda batch: batch.select(["name"]).append_column(
-        "city_upper",
-        batch.column("city").cast("string").dictionary_encode()
-    ),
-    batch_format="pyarrow",
-)
+import pyarrow.compute as pc
+def project_batch(batch):
+    city_upper = pc.utf8_upper(batch.column("city"))
+    return batch.select(["name"]).append_column("city_upper", city_upper)
+result = ds.map_batches(project_batch, batch_format="pyarrow")
 `} />
 
 Spark has a built-in expression language with dozens of functions (`upper`, `lower`, `concat`, `date_format`). Ray Data uses `select_columns` for simple projection, and you drop into Arrow or Pandas for transformations.
@@ -111,7 +109,7 @@ filtered = ds.map_batches(
 )
 `} />
 
-Spark's filter expressions are analyzed by Catalyst. Writing `df.filter(col("age") > 30).read.parquet(...)` lets Spark push the predicate into the Parquet reader, skipping entire row groups. Ray Data's filter takes an opaque Python lambda, so the scheduler cannot push it down. All data is read first.
+With `spark.read.parquet(...).filter(col("age") > 30)`, Catalyst can push compatible predicates into the Parquet scan. Whether row groups are skipped depends on the reader and Parquet metadata. Ray Data callable filters (Python lambdas) do not expose the same planner semantics; however, Ray Data also supports predicate expressions and documents Parquet filter pushdown for expression-based filters.
 
 ## Map / transform
 
@@ -233,10 +231,29 @@ from pyspark.sql.functions import broadcast
 joined = employees.join(broadcast(departments), "dept_id")
 `} />
 
-<CodeBlock language="python" filename="ray_data_join.py" code={`# Ray Data: basic join support (added in Ray 2.9+)
-# Note: Ray Data joins are more limited than Spark
-# For simple key-based joins, use zip or map_batches with lookup
-# Using map_batches with a reference dataset
+<CodeBlock language="python" filename="ray_data_join.py" code={`# Ray Data: experimental native join (introduced in Ray 2.46)
+import ray
+employees = ray.data.read_parquet("employees.parquet")
+departments = ray.data.read_parquet("departments.parquet")
+# Inner join on a key column
+joined = employees.join(
+    departments,
+    on=("dept_id",),
+    join_type="inner",
+    num_partitions=4,
+)
+# Left outer join
+joined = employees.join(
+    departments,
+    on=("dept_id",),
+    join_type="left_outer",
+    num_partitions=4,
+)
+# Supported types: inner, left_outer, right_outer, full_outer,
+#   left_semi, right_semi, left_anti, right_anti
+`} />
+
+<CodeBlock language="python" filename="ray_data_broadcast_join.py" code={`# Small dimension-table broadcast pattern with ray.put()
 import ray
 dept_ds = ray.data.read_parquet("departments.parquet")
 dept_lookup = {row["id"]: row for row in dept_ds.iter_rows()}
@@ -250,7 +267,7 @@ def join_dept(batch):
 result = ds.map_batches(join_dept, batch_format="pandas")
 `} />
 
-Joins are where Spark dominates. It supports inner, outer, left, right, cross, semi, and anti joins with automatic broadcast optimization for small tables. Ray Data's join support is minimal. For complex joins, you typically pre-join in Spark or implement broadcast-style lookups manually with `ray.put()`.
+Joins are where Spark's maturity shows. It supports inner, outer, left, right, cross, semi, and anti joins with automatic broadcast optimization, cost-based join selection, and sort-merge joins at scale. Ray Data has an experimental native `Dataset.join` API for key-based joins supporting inner, outer, semi, and anti types. It is memory-intensive and powered by hash-shuffle, so it requires careful partition sizing. For small dimension tables, the `ray.put()` broadcast pattern avoids the shuffle entirely.
 
 ## Writing output
 

@@ -119,11 +119,22 @@ ctx = ray.data.DataContext.get_current()
 ctx.target_max_block_size = 128 * 1024 * 1024  # 128MB per block
 
 ds = ray.data.read_images("s3://my-bucket/images/", size=(512, 512))
+# gpu-example: streaming-inference
 ds = ds.map_batches(
     run_inference,  # Slow GPU operator
     batch_size=32,
     num_gpus=1,
     compute=ray.data.ActorPoolStrategy(size=4),
+)
+ds.write_parquet("s3://my-bucket/predictions/")`} />
+
+For CPU-only experimentation, omit `num_gpus`. The logical transformation is the same, but performance, capacity, and potentially numerical execution characteristics can differ.
+
+<CodeBlock language="python" code={`# cpu-alternative: streaming-inference
+ds = ds.map_batches(
+    run_inference,
+    batch_size=32,
+    compute=ray.data.ActorPoolStrategy(size=2),
 )
 ds.write_parquet("s3://my-bucket/predictions/")`} />
 

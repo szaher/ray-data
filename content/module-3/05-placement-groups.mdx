@@ -85,6 +85,7 @@ pg = placement_group(bundles, strategy="SPREAD")
 ray.get(pg.ready())
 
 # Schedule tasks into specific bundles
+# gpu-resource-reference: omit num_gpus for CPU-only use
 @ray.remote(num_cpus=2, num_gpus=1)
 def train_shard(shard_id):
     return f"Training shard {shard_id}"
@@ -110,6 +111,7 @@ bundles = [{"CPU": 4, "GPU": 1} for _ in range(4)]
 pg = placement_group(bundles, strategy="STRICT_SPREAD")
 ray.get(pg.ready())
 
+# gpu-resource-reference: omit num_gpus for CPU-only use
 @ray.remote(num_cpus=4, num_gpus=1)
 class TrainWorker:
     def __init__(self, rank):

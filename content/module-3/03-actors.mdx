@@ -121,7 +121,8 @@ results = list(pool.map(lambda actor, t: actor.process.remote(t), texts))
 
 Like tasks, actors can declare resource requirements. You can also configure concurrency and lifetime:
 
-<CodeBlock language="python" code={`@ray.remote(num_cpus=2, num_gpus=1)
+<CodeBlock language="python" code={`# gpu-resource-reference: omit num_gpus for CPU-only use
+@ray.remote(num_cpus=2, num_gpus=1)
 class ModelServer:
     def __init__(self, checkpoint):
         import torch

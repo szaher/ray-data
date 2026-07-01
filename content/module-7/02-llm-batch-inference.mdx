@@ -10,7 +10,7 @@ quiz:
       - "__call__ cannot access GPU memory"
     correctIndex: 1
     explanation: "Loading in __init__ means each actor loads the multi-gigabyte model once. Loading in __call__ would reload it for every batch — destroying throughput."
-  - question: "What does concurrency control in a GPU inference stage?"
+  - question: "What does the compute parameter (ActorPoolStrategy) control in a GPU inference stage?"
     options:
       - "The number of prompts in each batch"
       - "The number of parallel actor replicas processing batches"
@@ -42,10 +42,12 @@ ds = ray.data.read_parquet("s3://data/prompts/")
 
 class HFPredictor:
     def __init__(self):
+        import torch
         from transformers import pipeline
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.pipe = pipeline(
             "text-generation", model="meta-llama/Llama-3.1-8B-Instruct",
-            device="cuda", torch_dtype="auto",
+            device=device, torch_dtype="auto",
         )
 
     def __call__(self, batch: dict) -> dict:
@@ -54,13 +56,36 @@ class HFPredictor:
         batch["response"] = [o[0]["generated_text"] for o in outputs]
         return batch
 
+# gpu-example: hf-llm-inference
 ds = ds.map_batches(HFPredictor, batch_size=32, compute=ray.data.ActorPoolStrategy(size=4), num_gpus=1)
+ds.write_parquet("s3://data/results/")
+`} />
+
+For CPU-only experimentation with a small model (not representative of production LLM throughput). The first run downloads model artifacts into the configured HuggingFace cache (set via `HF_HOME`).
+
+<CodeBlock language="python" code={`# cpu-alternative: hf-llm-inference
+class SmallPredictor:
+    def __init__(self):
+        from transformers import pipeline
+        self.pipe = pipeline(
+            "text-generation", model="distilgpt2",
+            revision="2290a62682d06624634c1f46a6ad5be0f47f38aa",
+            device="cpu",
+        )
+
+    def __call__(self, batch: dict) -> dict:
+        outputs = self.pipe(batch["prompt"].tolist(), max_new_tokens=32,
+                            batch_size=len(batch["prompt"]))
+        batch["response"] = [o[0]["generated_text"] for o in outputs]
+        return batch
+
+ds = ds.map_batches(SmallPredictor, batch_size=8, compute=ray.data.ActorPoolStrategy(size=1))
 ds.write_parquet("s3://data/results/")
 `} />
 
 ## Approach 2: vLLM for high throughput
 
-vLLM uses PagedAttention and continuous batching. It also supports tensor parallelism across multiple GPUs for large models.
+vLLM uses PagedAttention and continuous batching. It also supports tensor parallelism across multiple GPUs for large models. vLLM requires GPU resources. This example assumes a cluster with at least 8 GPUs (2 actors × 4 GPUs each).
 
 <CodeBlock language="python" code={`class VLLMPredictor:
     def __init__(self):

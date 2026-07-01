@@ -13,7 +13,10 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:deprecated-concurrency": "node scripts/check-deprecated-concurrency.mjs"
+    "check:deprecated-concurrency": "node scripts/check-deprecated-concurrency.mjs",
+    "check:gpu-patterns": "node scripts/check-gpu-patterns.mjs",
+    "check:device-aware": "python scripts/test-device-aware.py --force-cpu",
+    "check:module8-examples": "python scripts/test-module8-examples.py"
   },
   "dependencies": {
     "@anthropic-ai/vertex-sdk": "^0.16.1",
@@ -49,6 +52,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@marp-team/marp-cli": "4.4.0"
   }
 }

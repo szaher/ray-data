@@ -77,7 +77,13 @@ class Predictor:
         batch["pred"] = self.model.predict(batch["features"].tolist())
         return batch
 
+# gpu-example: transform-predictor
 ds = ds.map_batches(Predictor, compute=ray.data.ActorPoolStrategy(size=4), num_gpus=1)`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: transform-predictor
+ds = ds.map_batches(Predictor, compute=ray.data.ActorPoolStrategy(size=1), batch_size=64)`} />
 
 ## flat_map: one-to-many
 

@@ -47,20 +47,44 @@ Ray Serve deployments are Python classes decorated with `@serve.deployment`. Loa
 from ray import serve
 import numpy as np
 
+# gpu-example: text-classifier-serve
 @serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
 class TextClassifier:
     def __init__(self):
+        import torch
         from transformers import pipeline
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = pipeline(
             "text-classification",
             model="distilbert-base-uncased-finetuned-sst-2-english",
-            device=0,
+            device=device,
         )
 
     async def __call__(self, request):
         data = await request.json()
         text = data["text"]
         result = self.model(text)
+        return {"label": result[0]["label"], "score": result[0]["score"]}
+
+app = TextClassifier.bind()
+serve.run(app)`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: text-classifier-serve
+@serve.deployment(num_replicas=2)
+class TextClassifier:
+    def __init__(self):
+        from transformers import pipeline
+        self.model = pipeline(
+            "text-classification",
+            model="distilbert-base-uncased-finetuned-sst-2-english",
+            device="cpu",
+        )
+
+    async def __call__(self, request):
+        data = await request.json()
+        result = self.model(data["text"])
         return {"label": result[0]["label"], "score": result[0]["score"]}
 
 app = TextClassifier.bind()
@@ -79,21 +103,48 @@ class Preprocessor:
     async def __call__(self, text: str) -> dict:
         return self.tokenizer(text, padding="max_length", truncation=True, max_length=128)
 
+# gpu-example: model-inference-serve
 @serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
 class ModelInference:
     def __init__(self, preprocessor):
         import torch
         from transformers import AutoModelForSequenceClassification
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = AutoModelForSequenceClassification.from_pretrained(
             "distilbert-base-uncased-finetuned-sst-2-english"
-        ).cuda().eval()
+        ).eval().to(self.device)
         self.preprocessor = preprocessor
 
     async def __call__(self, request):
         import torch
         data = await request.json()
         tokens = await self.preprocessor.remote(data["text"])
-        input_ids = torch.tensor([tokens["input_ids"]]).cuda()
+        input_ids = torch.tensor([tokens["input_ids"]]).to(self.device)
+        with torch.no_grad():
+            pred = self.model(input_ids).logits.argmax(dim=1).item()
+        return {"class": pred}
+
+preprocessor = Preprocessor.bind()
+app = ModelInference.bind(preprocessor)
+serve.run(app)`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: model-inference-serve
+@serve.deployment(num_replicas=2)
+class ModelInference:
+    def __init__(self, preprocessor):
+        from transformers import AutoModelForSequenceClassification
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            "distilbert-base-uncased-finetuned-sst-2-english"
+        ).eval()
+        self.preprocessor = preprocessor
+
+    async def __call__(self, request):
+        import torch
+        data = await request.json()
+        tokens = await self.preprocessor.remote(data["text"])
+        input_ids = torch.tensor([tokens["input_ids"]])
         with torch.no_grad():
             pred = self.model(input_ids).logits.argmax(dim=1).item()
         return {"class": pred}

@@ -55,11 +55,13 @@ def compute_features(batch: dict) -> dict:
 <CodeBlock language="python" code={`from ray import serve
 from starlette.requests import Request
 
+# gpu-example: fraud-detector-serve
 @serve.deployment(num_replicas=2, ray_actor_options={"num_gpus": 1})
 class FraudDetector:
     def __init__(self):
         import torch
-        self.model = torch.jit.load("model.pt").eval().cuda()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = torch.jit.load("model.pt").eval().to(self.device)
 
     async def __call__(self, request: Request) -> dict:
         import torch
@@ -71,7 +73,35 @@ class FraudDetector:
         tensor = torch.tensor([[
             features["log_amount"][0], features["is_high_value"][0],
             features["hour_sin"][0], features["hour_cos"][0],
-        ]], dtype=torch.float32).cuda()
+        ]], dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            score = self.model(tensor).item()
+        return {"fraud_score": score, "is_fraud": score > 0.5}
+
+app = FraudDetector.bind()
+serve.run(app, route_prefix="/predict")
+`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: fraud-detector-serve
+@serve.deployment(num_replicas=2)
+class FraudDetector:
+    def __init__(self):
+        import torch
+        self.model = torch.jit.load("model.pt").eval()
+
+    async def __call__(self, request: Request) -> dict:
+        import torch
+        payload = await request.json()
+        features = compute_features({
+            "amount": [payload["amount"]],
+            "timestamp": [payload["timestamp"]],
+        })
+        tensor = torch.tensor([[
+            features["log_amount"][0], features["is_high_value"][0],
+            features["hour_sin"][0], features["hour_cos"][0],
+        ]], dtype=torch.float32)
         with torch.no_grad():
             score = self.model(tensor).item()
         return {"fraud_score": score, "is_fraud": score > 0.5}

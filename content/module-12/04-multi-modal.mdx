@@ -90,7 +90,7 @@ class ImageEmbedder:
         import torch, torchvision
         self.model = torchvision.models.resnet50(pretrained=True)
         self.model.eval()
-        self.device = torch.device("cuda")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
 
     def __call__(self, batch):
@@ -112,11 +112,21 @@ text_ds = text_ds.map_batches(
     compute=ray.data.ActorPoolStrategy(size=4),
 )
 
+# gpu-example: multimodal-image-embed
 image_ds = image_ds.map_batches(
     ImageEmbedder,
     batch_size=32,
     num_gpus=1,
     compute=ray.data.ActorPoolStrategy(size=2),
+)`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: multimodal-image-embed
+image_ds = image_ds.map_batches(
+    ImageEmbedder,
+    batch_size=8,
+    compute=ray.data.ActorPoolStrategy(size=1),
 )`} />
 
 ## Joining modalities

@@ -10,14 +10,14 @@ quiz:
       - "map does not work with NumPy arrays"
     correctIndex: 1
     explanation: "map_batches processes chunks of images together, amortizing per-call overhead and enabling vectorized GPU operations — critical for throughput."
-  - question: "What is the purpose of concurrency and num_gpus in map_batches for image pipelines?"
+  - question: "What is the purpose of compute (ActorPoolStrategy) and num_gpus in map_batches for image pipelines?"
     options:
       - "It tells Ray Data to download more images"
       - "It controls how many GPU actors run in parallel for that stage"
       - "It changes the image resolution"
       - "It enables distributed file storage"
     correctIndex: 1
-    explanation: "concurrency sets the number of parallel actor workers, and num_gpus requests GPU resources per worker — together they control GPU-accelerated parallelism."
+    explanation: "ActorPoolStrategy(size=N) sets the number of parallel actor workers, and num_gpus requests GPU resources per worker — together they control GPU-accelerated parallelism."
 ---
 
 ## End-to-end image processing
@@ -64,16 +64,25 @@ from torchvision.models import resnet50, ResNet50_Weights
 
 class ImageClassifier:
     def __init__(self):
-        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).eval().cuda()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
         self.labels = ResNet50_Weights.DEFAULT.meta["categories"]
 
     def __call__(self, batch: dict[str, np.ndarray]) -> dict:
-        tensors = torch.from_numpy(batch["image"]).permute(0, 3, 1, 2).cuda()
+        tensors = torch.from_numpy(batch["image"]).permute(0, 3, 1, 2).to(self.device)
         with torch.no_grad():
             preds = self.model(tensors).argmax(dim=1).cpu().numpy()
         return {"label": [self.labels[p] for p in preds]}
 
+# gpu-example: image-pipeline-inference
 ds = ds.map_batches(ImageClassifier, batch_size=64, compute=ray.data.ActorPoolStrategy(size=2), num_gpus=1)
+ds.write_parquet("s3://my-bucket/results/")
+`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: image-pipeline-inference
+ds = ds.map_batches(ImageClassifier, batch_size=16, compute=ray.data.ActorPoolStrategy(size=1))
 ds.write_parquet("s3://my-bucket/results/")
 `} />
 

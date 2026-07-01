@@ -51,13 +51,14 @@ class ImageClassifier:
     def __init__(self):
         import torch
         from torchvision.models import resnet50, ResNet50_Weights
-        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).cuda().eval()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = resnet50(weights=ResNet50_Weights.DEFAULT).eval().to(self.device)
         self.transforms = ResNet50_Weights.DEFAULT.transforms()
 
     def __call__(self, batch: dict) -> dict:
         import torch
         images = [self.transforms(img) for img in batch["image"]]
-        tensor = torch.stack(images).cuda()
+        tensor = torch.stack(images).to(self.device)
         with torch.no_grad():
             preds = self.model(tensor)
         batch["prediction"] = preds.argmax(dim=1).cpu().numpy()
@@ -71,11 +72,23 @@ class ImageClassifier:
 
 <CodeBlock language="python" code={`ds = ray.data.read_images("s3://my-bucket/images/")
 
+# gpu-example: resnet-batch-inference
 predictions = ds.map_batches(
     ImageClassifier,
     compute=ActorPoolStrategy(size=4),  # 4 GPU workers
     num_gpus=1,                         # 1 GPU per worker
     batch_size=256,                     # rows per batch
+)
+
+predictions.write_parquet("s3://my-bucket/results/")`} />
+
+For CPU-only experimentation (no GPU cluster required):
+
+<CodeBlock language="python" code={`# cpu-alternative: resnet-batch-inference
+predictions = ds.map_batches(
+    ImageClassifier,
+    compute=ActorPoolStrategy(size=1),
+    batch_size=64,
 )
 
 predictions.write_parquet("s3://my-bucket/results/")`} />

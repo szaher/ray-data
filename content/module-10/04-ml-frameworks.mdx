@@ -173,17 +173,15 @@ class SentimentPredictor:
         self.model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name
         )
-        self.model.eval()
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.eval().to(self.device)
     def __call__(self, batch):
         texts = batch["text"].tolist()
         encoded = self.tokenizer(
             texts, padding=True, truncation=True,
             max_length=512, return_tensors="pt",
         )
-        if torch.cuda.is_available():
-            encoded = {k: v.cuda() for k, v in encoded.items()}
+        encoded = {k: v.to(self.device) for k, v in encoded.items()}
         with torch.no_grad():
             outputs = self.model(**encoded)
             predictions = torch.softmax(outputs.logits, dim=-1)
@@ -198,6 +196,7 @@ results = ds.map_batches(
     SentimentPredictor,
     batch_format="pandas",
     compute=ray.data.ActorPoolStrategy(size=4),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,            # 1 GPU per replica
     batch_size=32,         # inference batch size
 )
@@ -267,6 +266,7 @@ trainer = TorchTrainer(
     train_loop_per_worker=train_func,
     train_loop_config={"lr": 0.001, "epochs": 10},
     datasets={"train": train_ds, "validation": val_ds},
+    # gpu-resource-reference: set use_gpu=False for CPU-only use
     scaling_config=ScalingConfig(
         num_workers=4,
         use_gpu=True,
@@ -330,6 +330,7 @@ ds = ray.data.read_images("s3://YOUR_BUCKET/images/", mode="RGB")
 predictions = ds.map_batches(
     ImageClassifier,
     compute=ray.data.ActorPoolStrategy(size=8),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,
     batch_size=64,
 )

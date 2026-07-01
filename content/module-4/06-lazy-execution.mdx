@@ -112,5 +112,12 @@ for epoch in range(10):
 
 # Good use of streaming: one-shot batch inference
 ds = ray.data.read_images("s3://bucket/images/")
+# gpu-example: lazy-inference
 ds = ds.map_batches(Predictor, num_gpus=1, compute=ray.data.ActorPoolStrategy(size=2))
 ds.write_parquet("s3://bucket/predictions/")  # stream through, no materialize needed`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: lazy-inference
+ds = ds.map_batches(Predictor, compute=ray.data.ActorPoolStrategy(size=1), batch_size=64)
+ds.write_parquet("s3://bucket/predictions/")`} />

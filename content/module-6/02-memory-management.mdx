@@ -81,6 +81,7 @@ Ray Data's streaming executor applies backpressure automatically. When downstrea
 
 <CodeBlock language="python" code={`ctx = ray.data.DataContext.get_current()
 
+# gpu-example: memory-aware-inference
 # Control the concurrency of each operator to limit memory
 ds = ray.data.read_parquet("s3://bucket/huge/").map_batches(
     heavy_model_inference,
@@ -97,6 +98,15 @@ ds_read = ray.data.read_parquet("data/").materialize()
 print(f"Read stage: {ds_read.stats()}")
 ds_mapped = ds_read.map_batches(transform).materialize()
 print(f"Map stage: {ds_mapped.stats()}")`} />
+
+For CPU-only experimentation, omit `num_gpus`. The logical transformation is the same, but performance, capacity, and potentially numerical execution characteristics can differ.
+
+<CodeBlock language="python" code={`# cpu-alternative: memory-aware-inference
+ds = ray.data.read_parquet("s3://bucket/huge/").map_batches(
+    heavy_model_inference,
+    batch_size=1024,
+    compute=ray.data.TaskPoolStrategy(size=2),
+)`} />
 
 ## Practical guidelines
 

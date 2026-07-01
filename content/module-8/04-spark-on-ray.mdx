@@ -68,14 +68,11 @@ RayDP is a thin integration layer that:
 
 <CodeBlock language="bash" filename="install.sh" code={`# Install RayDP (requires Ray and PySpark)
 pip install raydp
-# Or with specific versions
-pip install raydp[spark32]  # For Spark 3.2.x
-pip install raydp[spark33]  # For Spark 3.3.x
 # Verify installation
 python -c "import raydp; print(raydp.__version__)"
 `} />
 
-RayDP requires a working Ray installation and a compatible PySpark version. It does not require a standalone Spark cluster. Ray provides the cluster.
+RayDP requires a working Ray installation and a compatible PySpark version. Check the RayDP release notes for the supported PySpark range — it does not require a standalone Spark cluster. Ray provides the cluster.
 
 ## Setting up a Spark session on Ray
 
@@ -243,11 +240,17 @@ def train_func(config):
 trainer = TorchTrainer(
     train_func,
     datasets={"train": train_ds},
+    # gpu-example: spark-ray-train
     scaling_config=ScalingConfig(num_workers=4, use_gpu=True),
 )
 result = trainer.fit()
 print(f"Final loss: {result.metrics['loss']:.4f}")
 `} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: spark-ray-train
+scaling_config=ScalingConfig(num_workers=2, use_gpu=False)`} />
 
 ## How RayDP works internally
 

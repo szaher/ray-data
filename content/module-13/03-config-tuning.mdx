@@ -22,10 +22,12 @@ Ray Data has sensible defaults for most workloads. When you need to optimize mem
 
 <CodeBlock language="python" filename="ray_init_resources.py" code={`import ray
 # Development: limit resources to avoid starving your system
+# gpu-resource-reference: omit num_gpus for CPU-only use
 ray.init(num_cpus=4, num_gpus=1)
 # Production: explicit memory allocation
 ray.init(
     num_cpus=32,
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=4,
     object_store_memory=20 * 1024**3,  # 20 GiB
 )
@@ -103,6 +105,7 @@ ds = ds.map_batches(fn, batch_size=256)
 # Larger batches: more memory per call, better vectorization
 ds = ds.map_batches(fn, batch_size=8192)
 # GPU inference: match your model's optimal batch size
+# gpu-resource-reference: omit num_gpus for CPU-only use
 ds = ds.map_batches(ModelClass, batch_size=32, num_gpus=1)
 `} />
 
@@ -209,6 +212,7 @@ Enable when your transform only reads batch data without modifying it in place. 
 ds = ds.map_batches(
     ModelClass,
     compute=ActorPoolStrategy(size=4),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,
     batch_size=64,
 )
@@ -216,6 +220,7 @@ ds = ds.map_batches(
 ds = ds.map_batches(
     ModelClass,
     compute=ActorPoolStrategy(min_size=2, max_size=8),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,
     batch_size=64,
 )
@@ -236,12 +241,14 @@ ds = ds.map_batches(heavy_cpu_fn, num_cpus=4)
 ds = ds.map_batches(
     GpuModel,
     compute=ActorPoolStrategy(size=2),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,
 )
 # Multi-GPU model: 2 GPUs per actor
 ds = ds.map_batches(
     LargeModel,
     compute=ActorPoolStrategy(size=1),
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=2,
 )
 `} />
@@ -272,6 +279,7 @@ A production pipeline with all major tuning settings set explicitly:
 <CodeBlock language="python" filename="full_tuned_pipeline.py" code={`import ray
 from ray.data import DataContext, ActorPoolStrategy
 # 1. Initialize Ray with explicit resources
+# gpu-resource-reference: omit num_gpus for CPU-only use
 ray.init(num_cpus=32, num_gpus=4, object_store_memory=30 * 1024**3)
 # 2. Configure DataContext
 ctx = DataContext.get_current()
@@ -297,6 +305,7 @@ ds = ds.map_batches(
     ModelClass,
     compute=ActorPoolStrategy(size=4),
     batch_size=64,
+    # gpu-resource-reference: omit num_gpus for CPU-only use
     num_gpus=1,
 )
 # 6. Write output

@@ -58,9 +58,23 @@ val_ds = ray.data.read_parquet("s3://bucket/val/")
 trainer = TorchTrainer(
     train_loop_per_worker=train_fn,
     datasets={"train": train_ds, "val": val_ds},
+    # gpu-example: train-scaling
     scaling_config=ScalingConfig(
         num_workers=4,
         use_gpu=True,
+    ),
+)
+result = trainer.fit()`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: train-scaling
+trainer = TorchTrainer(
+    train_loop_per_worker=train_fn,
+    datasets={"train": train_ds, "val": val_ds},
+    scaling_config=ScalingConfig(
+        num_workers=2,
+        use_gpu=False,
     ),
 )
 result = trainer.fit()`} />
@@ -73,7 +87,9 @@ Inside each worker, `get_dataset_shard` returns that worker's portion of the dat
 from ray.train import report
 
 def train_fn(config):
-    model = build_model().cuda()
+    import torch
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = build_model().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     # Each worker gets its own shard automatically
@@ -84,8 +100,8 @@ def train_fn(config):
             batch_size=256,
             dtypes=torch.float32,
         ):
-            features = batch["features"].cuda()
-            labels = batch["labels"].cuda()
+            features = batch["features"].to(device)
+            labels = batch["labels"].to(device)
 
             loss = train_step(model, optimizer, features, labels)
 

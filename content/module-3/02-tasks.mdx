@@ -107,7 +107,8 @@ stats = ray.get(result_ref)
 
 You can specify how many CPUs, GPUs, or custom resources a task needs:
 
-<CodeBlock language="python" code={`@ray.remote(num_cpus=4, num_gpus=1)
+<CodeBlock language="python" code={`# gpu-resource-reference: omit num_gpus for CPU-only use
+@ray.remote(num_cpus=4, num_gpus=1)
 def train_model(data):
     # This task reserves 4 CPUs and 1 GPU
     ...

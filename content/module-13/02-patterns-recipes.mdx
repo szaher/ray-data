@@ -55,21 +55,34 @@ from ray.data import ActorPoolStrategy
 class ImageClassifier:
     def __init__(self):
         import torch
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = torch.hub.load("pytorch/vision", "resnet50", pretrained=True)
-        self.model.eval().cuda()
+        self.model.eval().to(self.device)
     def __call__(self, batch: dict) -> dict:
         import torch
-        images = torch.tensor(batch["image"]).cuda()
+        images = torch.tensor(batch["image"]).to(self.device)
         with torch.no_grad():
             preds = self.model(images).argmax(dim=1).cpu().numpy()
         return {"prediction": preds}
 ds = ray.data.read_binary_files("s3://bucket/images/", include_paths=True)
 ds = ds.map(preprocess_image)  # your preprocessing function
+# gpu-example: recipe-gpu-inference
 ds = ds.map_batches(
     ImageClassifier,
     compute=ActorPoolStrategy(size=4),
     num_gpus=1,
     batch_size=32,
+)
+ds.write_parquet("s3://bucket/predictions/")
+`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: recipe-gpu-inference
+ds = ds.map_batches(
+    ImageClassifier,
+    compute=ActorPoolStrategy(size=1),
+    batch_size=8,
 )
 ds.write_parquet("s3://bucket/predictions/")
 `} />

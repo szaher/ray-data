@@ -105,8 +105,14 @@ trainer = TorchTrainer(
     train_loop_per_worker=train_fn,
     datasets={"train": train_ds, "val": val_ds},
     preprocessor=preprocessor,  # applied before data reaches workers
+    # gpu-example: preprocessor-train
     scaling_config=ScalingConfig(num_workers=4, use_gpu=True),
 )
 result = trainer.fit()`} />
+
+For CPU-only experimentation:
+
+<CodeBlock language="python" code={`# cpu-alternative: preprocessor-train
+scaling_config=ScalingConfig(num_workers=2, use_gpu=False)`} />
 
 Define your preprocessing pipeline once with `Chain`, fit it on training data, and reuse the same fitted pipeline everywhere: training, evaluation, and serving.
